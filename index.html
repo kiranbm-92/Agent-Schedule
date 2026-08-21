@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WFM Schedule Plotter</title>
+<style>
+:root{
+  --bg:#f5f7fb; --card:#fff; --text:#172033; --muted:#667085;
+  --border:#dfe4ec; --primary:#2563eb; --danger:#dc2626;
+  --cellW:56px; --rowH:48px;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:Inter,Arial,sans-serif;background:var(--bg);color:var(--text)}
+button,input,select{font:inherit}
+button{cursor:pointer;border:0}
+.hidden{display:none!important}
+
+/* Login & Modals */
+.login-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;
+ background:linear-gradient(135deg,#0f172a,#1e3a8a)}
+.login-card{width:420px;background:#fff;border-radius:18px;padding:32px;box-shadow:0 20px 60px #0005}
+.login-card h1{margin:0 0 8px}.login-card p{color:var(--muted);margin:0 0 24px}
+.field{margin-bottom:14px}.field label{display:block;font-size:13px;font-weight:700;margin-bottom:6px}
+.field input,.field select{width:100%;padding:11px;border:1px solid var(--border);border-radius:8px}
+.primary{background:var(--primary);color:#fff;padding:11px 16px;border-radius:8px;font-weight:700}
+.secondary{background:#eef2f7;color:#243047;padding:10px 14px;border-radius:8px}
+.login-error{color:var(--danger);font-size:13px;margin-top:12px}
+.reset-link{color:var(--primary);font-size:13px;text-align:right;cursor:pointer;font-weight:600;margin-top:6px;display:block}
+.reset-link:hover{text-decoration:underline}
+
+/* Modal Overlay */
+.modal-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(15,23,42,0.7);display:flex;align-items:center;justify-content:center;z-index:1000}
+.modal-card{width:400px;background:#fff;border-radius:16px;padding:28px;box-shadow:0 20px 50px rgba(0,0,0,0.3)}
+
+/* App */
+.topbar{height:64px;background:#fff;border-bottom:1px solid var(--border);display:flex;align-items:center;
+padding:0 18px;gap:14px;position:sticky;top:0;z-index:50}
+.brand{font-weight:800;font-size:18px;margin-right:auto}.topbar .clock{font-weight:700;font-variant-numeric:tabular-nums}
+.badge{padding:5px 9px;border-radius:999px;font-size:12px;font-weight:700;background:#eaf2ff;color:#1d4ed8}
+.container{padding:18px;max-width:100%;overflow:hidden}
+.toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:14px}
+.toolbar input,.toolbar select{padding:9px;border:1px solid var(--border);border-radius:8px;background:#fff}
+.tabs{display:flex;gap:4px;margin-bottom:14px}.tab{padding:9px 14px;border-radius:8px;background:#e8edf4;font-weight:700}
+.tab.active{background:var(--primary);color:#fff}
+
+.card{background:#fff;border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:14px}
+.legend{display:flex;gap:7px;flex-wrap:wrap}.legend span{padding:6px 9px;border-radius:6px;font-size:12px;font-weight:700}
+
+/* Plotter */
+.plot-wrap{border:1px solid var(--border);border-radius:10px;background:#fff;overflow:auto;max-height:70vh}
+.plot{display:grid;grid-template-columns:390px repeat(96,var(--cellW));min-width:5760px}
+.agent-head{position:sticky;left:0;z-index:20;background:#f8fafc;border-right:1px solid var(--border);
+border-bottom:1px solid var(--border);height:50px;padding:8px}
+.time-head{height:50px;background:#f8fafc;border-right:1px solid var(--border);border-bottom:1px solid var(--border);
+display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;writing-mode:vertical-rl;transform:rotate(180deg)}
+.agent-cell{position:sticky;left:0;z-index:10;background:#fff;border-right:1px solid var(--border);
+border-bottom:1px solid var(--border);height:var(--rowH);display:flex;align-items:center;padding:5px 8px;gap:8px}
+.agent-info{min-width:0}.agent-name{font-weight:700;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.agent-meta{font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.aux-cell{height:var(--rowH);border-right:1px solid #e8ecf2;border-bottom:1px solid var(--border);
+display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;user-select:none}
+.aux-cell:hover{outline:2px solid #111;outline-offset:-2px}
+.shift-cell{box-shadow:inset 0 4px 0 #1112}
+.selected{outline:2px solid #111;outline-offset:-2px}
+
+/* AUX colors */
+.available{background:#22c55e;color:#063b19}.break{background:#3b82f6;color:#fff}
+.lunch{background:#f59e0b;color:#421f00}.bio{background:#06b6d4;color:#00323b}
+.breakpending{background:#fde047;color:#3f3000}.meeting{background:#a855f7;color:#fff}
+.tlfeedback{background:#ec4899;color:#fff}.qafeedback{background:#8b5cf6;color:#fff}
+.nht{background:#14b8a6;color:#fff}.pkt{background:#0ea5e9;color:#fff}
+.training{background:#6366f1;color:#fff}.coaching{background:#f97316;color:#fff}
+.offline{background:#64748b;color:#fff}.empty{background:#fff}
+
+/* Agent timer */
+.agent-panel{display:grid;grid-template-columns:2fr 1fr;gap:14px}
+.current-status{display:flex;align-items:center;justify-content:space-between;padding:18px;border-radius:12px;background:#f8fafc}
+.status-code{font-size:28px;font-weight:900}.status-timer{font-size:30px;font-weight:900;font-variant-numeric:tabular-nums}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.kpi{padding:14px;border:1px solid var(--border);border-radius:10px}
+.kpi b{display:block;font-size:20px}.kpi small{color:var(--muted)}
+.summary-table{width:100%;border-collapse:collapse}.summary-table th,.summary-table td{padding:9px;border-bottom:1px solid var(--border);text-align:left;font-size:13px}
+
+/* Admin */
+.table-scroll{overflow:auto}.data-table{width:100%;border-collapse:collapse;min-width:800px}.data-table th,.data-table td{padding:9px;border-bottom:1px solid var(--border);font-size:13px;text-align:left}
+.action{padding:6px 9px;border-radius:6px;background:#eef2f7}.danger{color:#b91c1c;background:#fee2e2}
+
+@media(max-width:900px){.agent-panel{grid-template-columns:1fr}.kpis{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<section id="loginScreen" class="login-screen">
+  <div class="login-card">
+    <h1>WFM Schedule Plotter</h1>
+    <p>Sign in with your unique WFM / Agent credentials.</p>
+    <div class="field"><label>Username</label><input id="loginUser" placeholder="e.g. agent001"></div>
+    <div class="field">
+      <label>Password</label>
+      <input id="loginPass" type="password" placeholder="Password">
+      <span class="reset-link" onclick="openResetModal()">Reset Password?</span>
+    </div>
+    <button class="primary" style="width:100%" onclick="login()">Sign In</button>
+    <div id="loginError" class="login-error"></div>
+    <div style="margin-top:18px;font-size:11px;color:#667085">
+      Demo accounts: <b>wfm.admin / Wfm@123</b>, <b>agent001 / Agent@123</b>, <b>agent002 / Agent@123</b>
+    </div>
+  </div>
+</section>
+
+<!-- RESET PASSWORD MODAL -->
+<div id="resetModal" class="modal-overlay hidden">
+  <div class="modal-card">
+    <h2 style="margin-top:0;margin-bottom:8px">Reset Password</h2>
+    <p style="color:var(--muted);font-size:13px;margin-top:0;margin-bottom:18px">Enter your registered email address to receive a 6-digit OTP.</p>
+    
+    <!-- Step 1: Request OTP -->
+    <div id="otpStep1">
+      <div class="field">
+        <label>Email Address</label>
+        <input id="resetEmail" type="email" placeholder="e.g. agent001@company.com">
+      </div>
+      <button class="primary" style="width:100%" onclick="sendOTP()">Send 6-Digit OTP</button>
+    </div>
+
+    <!-- Step 2: Verify OTP & New Password -->
+    <div id="otpStep2" class="hidden">
+      <div class="field">
+        <label>Enter 6-Digit OTP</label>
+        <input id="otpInput" type="text" maxlength="6" placeholder="123456">
+      </div>
+      <div class="field">
+        <label>New Password</label>
+        <input id="newPassInput" type="password" placeholder="New Password">
+      </div>
+      <button class="primary" style="width:100%" onclick="verifyAndReset()">Reset Password</button>
+    </div>
+
+    <div id="resetError" class="login-error"></div>
+    <button class="secondary" style="width:100%;margin-top:10px" onclick="closeResetModal()">Cancel</button>
+  </div>
+</div>
+
+<!-- FIRST LOGIN MANDATORY PASSWORD CHANGE MODAL -->
+<div id="forceChangeModal" class="modal-overlay hidden">
+  <div class="modal-card">
+    <h2 style="margin-top:0;margin-bottom:8px">First-Time Login</h2>
+    <p style="color:var(--muted);font-size:13px;margin-top:0;margin-bottom:18px">For security reasons, you must update your password after resetting it before continuing.</p>
+    <div class="field">
+      <label>New Password</label>
+      <input id="forceNewPass" type="password" placeholder="Enter new password">
+    </div>
+    <div class="field">
+      <label>Confirm Password</label>
+      <input id="forceConfirmPass" type="password" placeholder="Confirm new password">
+    </div>
+    <div id="forceError" class="login-error"></div>
+    <button class="primary" style="width:100%;margin-top:10px" onclick="submitFirstLoginChange()">Update Password & Continue</button>
+  </div>
+</div>
+
+<!-- APP -->
+<section id="app" class="hidden">
+<header class="topbar">
+  <div class="brand">WFM Schedule Plotter</div>
+  <span id="roleBadge" class="badge"></span>
+  <span id="topUser" class="badge"></span>
+  <span id="liveClock" class="clock"></span>
+  <button class="secondary" onclick="logout()">Logout</button>
+</header>
+
+<main class="container">
+  <div class="tabs">
+    <button id="plotTab" class="tab active" onclick="showTab('plot')">Schedule Plotter</button>
+    <button id="agentTab" class="tab" onclick="showTab('agent')">My Status</button>
+    <button id="dashboardTab" class="tab" onclick="showTab('dashboard')">Reporting Dashboard</button>
+    <button id="adminTab" class="tab" onclick="showTab('admin')">Admin</button>
+  </div>
+
+  <!-- PLOTTER -->
+  <section id="plotSection">
+    <div class="toolbar">
+      <input id="scheduleDate" type="date" onchange="renderPlot()">
+      <input id="searchAgent" placeholder="Search agent..." oninput="renderPlot()">
+      <select id="agencyFilter" onchange="renderPlot()"><option value="">All Agencies</option></select>
+      <select id="queueFilter" onchange="renderPlot()"><option value="">All Queues</option></select>
+      <button class="primary adminOnly" onclick="addAgent()">+ Add Agent</button>
+      <button class="secondary adminOnly" onclick="clearSelectedAgent()">Clear Selected Day</button>
+      <button class="secondary adminOnly" onclick="saveSchedules()">Save Schedule</button>
+      <button class="secondary" onclick="exportCSV()">Export AUX CSV</button>
+    </div>
+
+    <div class="card">
+      <b>AUX Codes – click a 15-minute slot to plot the selected code</b>
+      <div class="legend" id="legend"></div>
+      <div style="font-size:12px;color:#667085;margin-top:8px">
+        Admin/WFM: select an AUX code and click cells. Agents have read-only schedule access.
+      </div>
+    </div>
+
+    <div class="plot-wrap"><div id="plot" class="plot"></div></div>
+  </section>
+
+  <!-- AGENT -->
+  <section id="agentSection" class="hidden">
+    <div class="agent-panel">
+      <div class="card">
+        <h2 style="margin-top:0">Live AUX Status</h2>
+        <div class="current-status">
+          <div><div style="color:#667085;font-size:12px">Current AUX</div><div id="currentAux" class="status-code">-</div></div>
+          <div style="text-align:right"><div style="color:#667085;font-size:12px">Running Time</div><div id="currentTimer" class="status-timer">00:00:00</div></div>
+        </div>
+        <p style="font-size:12px;color:#667085">
+          Timer follows the current 15-minute plotted AUX slot and the actual system time.
+          The timer resets automatically when the AUX changes.
+        </p>
+      </div>
+      <div class="card">
+        <h3 style="margin-top:0">Today's Summary</h3>
+        <div id="todaySummary"></div>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Today's AUX Usage</h3>
+      <div id="agentUsageTable"></div>
+    </div>
+  </section>
+
+  <!-- DASHBOARD -->
+  <section id="dashboardSection" class="hidden">
+    <div class="toolbar">
+      <input id="reportDate" type="date" onchange="renderDashboard()">
+      <button class="secondary" onclick="exportCSV()">Export Detailed AUX Report</button>
+    </div>
+    <div id="dashboardKpis" class="kpis"></div>
+    <div class="card">
+      <h3>Agent Status Summary</h3>
+      <div class="table-scroll"><table class="data-table"><thead><tr>
+        <th>Agent</th><th>Agency</th><th>Queue</th><th>Shift</th><th>Current AUX</th>
+        <th>Available</th><th>Break</th><th>Lunch</th><th>Other AUX</th>
+      </tr></thead><tbody id="dashboardBody"></tbody></table></div>
+    </div>
+  </section>
+
+  <!-- ADMIN -->
+  <section id="adminSection" class="hidden">
+    <div class="card">
+      <h3>Agent & Credential Management</h3>
+      <p style="font-size:12px;color:#667085">Demo/static mode stores users in browser localStorage. Do not use this approach for production passwords.</p>
+      <div class="table-scroll"><table class="data-table"><thead><tr>
+        <th>Name</th><th>Username</th><th>Email</th><th>Agency</th><th>Unit</th><th>Queue</th><th>Shift</th><th>Role</th><th>Action</th>
+      </tr></thead><tbody id="adminBody"></tbody></table></div>
+    </div>
+  </section>
+</main>
+</section>
+
+<script>
+/* ==========================================================
+   WFM SCHEDULE PLOTTER - STATIC GITHUB PAGES DEMO
+   ========================================================== */
+
+const AUX = [
+ {key:"available", label:"Available", short:"AV"},
+ {key:"break", label:"Break", short:"BR"},
+ {key:"lunch", label:"Lunch", short:"LU"},
+ {key:"bio", label:"Bio Break", short:"BB"},
+ {key:"breakpending", label:"Break Pending", short:"BP"},
+ {key:"meeting", label:"Team Meeting", short:"TM"},
+ {key:"tlfeedback", label:"TL Feedback", short:"TL"},
+ {key:"qafeedback", label:"QA Feedback", short:"QA"},
+ {key:"nht", label:"NHT Training", short:"NH"},
+ {key:"pkt", label:"PKT Training", short:"PK"},
+ {key:"training", label:"Training", short:"TR"},
+ {key:"coaching", label:"Coaching", short:"CO"},
+ {key:"offline", label:"Offline", short:"OF"}
+];
+
+const defaultUsers = [
+ {id:"u1",name:"WFM Admin",username:"wfm.admin",email:"admin@wfm.com",password:"Wfm@123",role:"admin",agency:"Internal",unit:"WFM",queue:"All",shift:"09:00-18:00",requirePasswordReset:false},
+ {id:"u2",name:"Rahul Sharma",username:"agent001",email:"agent001@company.com",password:"Agent@123",role:"agent",agency:"RM",unit:"Support",queue:"Live Chat",shift:"08:00-17:00",requirePasswordReset:false},
+ {id:"u3",name:"Priya Nair",username:"agent002",email:"agent002@company.com",password:"Agent@123",role:"agent",agency:"RM",unit:"Support",queue:"Email",shift:"11:00-20:00",requirePasswordReset:false},
+ {id:"u4",name:"Amit Kumar",username:"agent003",email:"agent003@company.com",password:"Agent@123",role:"agent",agency:"CNX",unit:"Support",queue:"Live Chat",shift:"15:00-00:00",requirePasswordReset:false},
+ {id:"u5",name:"Sneha Das",username:"agent004",email:"agent004@company.com",password:"Agent@123",role:"agent",agency:"FiveS",unit:"Support",queue:"Tickets",shift:"23:00-08:00",requirePasswordReset:false}
+];
+
+let users = JSON.parse(localStorage.getItem("wfm_users") || "null") || defaultUsers;
+let schedules = JSON.parse(localStorage.getItem("wfm_schedules") || "{}");
+let usage = JSON.parse(localStorage.getItem("wfm_usage") || "{}");
+let currentUser = null;
+let selectedAux = "available";
+let selectedDate = today();
+let timerInterval = null;
+
+// OTP Reset Tracking
+let generatedOTP = null;
+let targetResetUser = null;
+
+function today(){
+ const d=new Date();
+ return d.toISOString().slice(0,10);
+}
+function saveAll(){
+ localStorage.setItem("wfm_users",JSON.stringify(users));
+ localStorage.setItem("wfm_schedules",JSON.stringify(schedules));
+ localStorage.setItem("wfm_usage",JSON.stringify(usage));
+}
+
+/* AUTHENTICATION & LOGIN */
+function login(){
+ const u=document.getElementById("loginUser").value.trim();
+ const p=document.getElementById("loginPass").value;
+ const found=users.find(x=>x.username===u && x.password===p);
+ if(!found){document.getElementById("loginError").textContent="Invalid username or password.";return}
+ 
+ currentUser=found;
+ sessionStorage.setItem("wfm_current_user",found.id);
+
+ // Check if user was flagged to change password on first login
+ if(currentUser.requirePasswordReset){
+   document.getElementById("forceChangeModal").classList.remove("hidden");
+   return;
+ }
+
+ initializeAppView();
+}
+
+function submitFirstLoginChange(){
+ const p1=document.getElementById("forceNewPass").value;
+ const p2=document.getElementById("forceConfirmPass").value;
+ if(!p1||p1.length<6){document.getElementById("forceError").textContent="Password must be at least 6 characters.";return}
+ if(p1!==p2){document.getElementById("forceError").textContent="Passwords do not match.";return}
+ 
+ currentUser.password=p1;
+ currentUser.requirePasswordReset=false;
+ saveAll();
+ alert("Password successfully updated!");
+ document.getElementById("forceChangeModal").classList.add("hidden");
+ initializeAppView();
+}
+
+function initializeAppView(){
+ document.getElementById("loginScreen").classList.add("hidden");
+ document.getElementById("app").classList.remove("hidden");
+ document.getElementById("roleBadge").textContent=currentUser.role.toUpperCase();
+ document.getElementById("topUser").textContent=currentUser.name;
+ document.getElementById("scheduleDate").value=selectedDate;
+ document.getElementById("reportDate").value=selectedDate;
+ applyPermissions();
+ populateFilters();
+ renderLegend();
+ renderPlot();
+ renderAgent();
+ renderDashboard();
+ renderAdmin();
+ startClock();
+ showTab(currentUser.role==="agent"?"agent":"plot");
+}
+
+/* RESET PASSWORD MODAL FUNCTIONS */
+function openResetModal(){
+ document.getElementById("resetModal").classList.remove("hidden");
+ document.getElementById("otpStep1").classList.remove("hidden");
+ document.getElementById("otpStep2").classList.add("hidden");
+ document.getElementById("resetEmail").value="";
+ document.getElementById("otpInput").value="";
+ document.getElementById("newPassInput").value="";
+ document.getElementById("resetError").textContent="";
+ generatedOTP=null;
+ targetResetUser=null;
+}
+function closeResetModal(){
+ document.getElementById("resetModal").classList.add("hidden");
+}
+
+function sendOTP(){
+ const email=document.getElementById("resetEmail").value.trim();
+ const found=users.find(x=>x.email&&x.email.toLowerCase()===email.toLowerCase());
+ if(!found){
+   document.getElementById("resetError").textContent="No registered user found with this email address.";
+   return;
+ }
+ targetResetUser=found;
+ generatedOTP=String(Math.floor(100000 + Math.random() * 900000));
+ alert(`[DEMO SYSTEM SIMULATION]
+
+An email containing your 6-digit OTP code has been dispatched to: ${email}
+
+Your OTP Code is: ${generatedOTP}`);
+ 
+ document.getElementById("otpStep1").classList.add("hidden");
+ document.getElementById("otpStep2").classList.remove("hidden");
+ document.getElementById("resetError").textContent="";
+}
+
+function verifyAndReset(){
+ const enteredOTP=document.getElementById("otpInput").value.trim();
+ const newPass=document.getElementById("newPassInput").value;
+ if(enteredOTP!==generatedOTP){
+   document.getElementById("resetError").textContent="Invalid OTP code. Please check and try again.";
+   return;
+ }
+ if(!newPass||newPass.length<6){
+   document.getElementById("resetError").textContent="Password must be at least 6 characters long.";
+   return;
+ }
+ 
+ // Update user password and flag for first-time login update
+ targetResetUser.password=newPass;
+ targetResetUser.requirePasswordReset=true;
+ saveAll();
+ 
+ alert("Password successfully reset! On your next login, you will be prompted to set your final password.");
+ closeResetModal();
+}
+
+function logout(){
+ sessionStorage.removeItem("wfm_current_user");
+ currentUser=null;
+ if(timerInterval)clearInterval(timerInterval);
+ document.getElementById("app").classList.add("hidden");
+ document.getElementById("loginScreen").classList.remove("hidden");
+}
+function restoreSession(){
+ const id=sessionStorage.getItem("wfm_current_user");
+ if(id){
+   const found=users.find(x=>x.id===id);
+   if(found){
+     currentUser=found;
+     if(!currentUser.requirePasswordReset){
+       document.getElementById("loginUser").value=found.username;
+       document.getElementById("loginPass").value=found.password;
+       login();
+     }
+   }
+ }
+}
+function applyPermissions(){
+ const isAdmin=currentUser.role==="admin";
+ document.querySelectorAll(".adminOnly").forEach(x=>x.classList.toggle("hidden",!isAdmin));
+ document.getElementById("adminTab").classList.toggle("hidden",!isAdmin);
+ document.getElementById("dashboardTab").classList.toggle("hidden",!isAdmin);
+}
+function showTab(tab){
+ ["plot","agent","dashboard","admin"].forEach(t=>{
+  document.getElementById(t+"Section").classList.toggle("hidden",t!==tab);
+  const btn=document.getElementById(t+"Tab"); if(btn)btn.classList.toggle("active",t===tab);
+ });
+ if(tab==="plot")renderPlot();
+ if(tab==="agent")renderAgent();
+ if(tab==="dashboard")renderDashboard();
+ if(tab==="admin")renderAdmin();
+}
+
+/* CLOCK */
+function startClock(){
+ function tick(){
+  const d=new Date();
+  document.getElementById("liveClock").textContent=d.toLocaleString("en-IN",{dateStyle:"medium",timeStyle:"medium"});
+  updateLiveTimer();
+ }
+ tick(); if(timerInterval)clearInterval(timerInterval); timerInterval=setInterval(tick,1000);
+}
+
+/* LEGEND */
+function renderLegend(){
+ const box=document.getElementById("legend"); box.innerHTML="";
+ AUX.forEach(a=>{
+  const s=document.createElement("span"); s.className=a.key; s.textContent=a.label;
+  s.style.cursor=currentUser.role==="admin"?"pointer":"default";
+  if(currentUser.role==="admin"){
+   s.onclick=()=>{selectedAux=a.key;document.querySelectorAll(".legend span").forEach(x=>x.style.outline="");s.style.outline="3px solid #111"};
+  }
+  box.appendChild(s);
+ });
+}
+
+/* FILTERS */
+function populateFilters(){
+ const agencies=[...new Set(users.filter(u=>u.role==="agent").map(u=>u.agency))];
+ const queues=[...new Set(users.filter(u=>u.role==="agent").map(u=>u.queue))];
+ document.getElementById("agencyFilter").innerHTML='<option value="">All Agencies</option>'+agencies.map(x=>`<option>${esc(x)}</option>`).join("");
+ document.getElementById("queueFilter").innerHTML='<option value="">All Queues</option>'+queues.map(x=>`<option>${esc(x)}</option>`).join("");
+}
+
+/* SCHEDULE DATA */
+function dayKey(date,userId){return date+"_"+userId}
+function getDaySchedule(userId,date){
+ const key=dayKey(date,userId);
+ if(!schedules[key]) schedules[key]=Array(96).fill("");
+ return schedules[key];
+}
+function auxByKey(k){return AUX.find(a=>a.key===k)}
+function timeLabel(i){
+ const h=Math.floor(i/4),m=(i%4)*15;
+ return String(h).padStart(2,"0")+":"+String(m).padStart(2,"0");
+}
+function parseShift(shift){
+ const m=shift.match(/(\d{1,2}):(\d{2})-(\d{1,2}):(\d{2})/);
+ if(!m)return null;
+ return {start:+m[1]*60 + +m[2],end:+m[3]*60 + +m[4]};
+}
+function inShift(i,shift){
+ const s=parseShift(shift);if(!s)return false;
+ const t=i*15;
+ return s.start<=s.end ? t>=s.start&&t<s.end : t>=s.start||t<s.end;
+}
+
+/* PLOTTER */
+function renderPlot(){
+ const plot=document.getElementById("plot");
+ const date=document.getElementById("scheduleDate").value||today();
+ selectedDate=date;
+ let agents=users.filter(u=>u.role==="agent");
+ const search=document.getElementById("searchAgent").value.toLowerCase();
+ const agency=document.getElementById("agencyFilter").value;
+ const queue=document.getElementById("queueFilter").value;
+ agents=agents.filter(u=>
+   (!search||u.name.toLowerCase().includes(search)||u.username.toLowerCase().includes(search)) &&
+   (!agency||u.agency===agency)&&(!queue||u.queue===queue)
+ );
+ plot.innerHTML="";
+ const head=document.createElement("div");head.className="agent-head";
+ head.innerHTML="<b>Agent</b><br><small>Name / Agency / Unit / Queue / Shift</small>";plot.appendChild(head);
+ for(let i=0;i<96;i++){
+  const h=document.createElement("div");h.className="time-head";h.textContent=timeLabel(i);plot.appendChild(h);
+ }
+ agents.forEach(agent=>{
+  const ac=document.createElement("div");ac.className="agent-cell";
+  ac.innerHTML=`<div class="agent-info"><div class="agent-name">${esc(agent.name)}</div>
+   <div class="agent-meta">${esc(agent.agency)} • ${esc(agent.unit)} • ${esc(agent.queue)} • ${esc(agent.shift)}</div></div>`;
+  plot.appendChild(ac);
+  const day=getDaySchedule(agent.id,date);
+  for(let i=0;i<96;i++){
+   const c=document.createElement("div"); const key=day[i];
+   c.className="aux-cell "+(key||"empty")+(inShift(i,agent.shift)?" shift-cell":"");
+   c.textContent=key?(auxByKey(key)?.short||""):"";
+   c.title=`${timeLabel(i)} - ${auxByKey(key)?.label||"Unplotted"}`;
+   if(currentUser.role==="admin"){
+    c.onclick=()=>setSlot(agent.id,date,i);
+   }
+   plot.appendChild(c);
+  }
+ });
+}
+function setSlot(agentId,date,i){
+ const day=getDaySchedule(agentId,date);
+ day[i]=day[i]===selectedAux ? "" : selectedAux;
+ schedules[dayKey(date,agentId)]=day;
+ saveAll(); renderPlot();
+}
+function clearSelectedAgent(){
+ if(currentUser.role!=="admin")return;
+ const name=prompt("Enter agent username to clear:");
+ const agent=users.find(u=>u.username===name);
+ if(!agent)return alert("Agent not found.");
+ schedules[dayKey(selectedDate,agent.id)]=Array(96).fill("");
+ saveAll();renderPlot();
+}
+function saveSchedules(){saveAll();alert("Schedule saved in this browser.");}
+
+/* AGENT STATUS */
+function currentSlot(){
+ const now=new Date(), minutes=now.getHours()*60+now.getMinutes();
+ return Math.floor(minutes/15);
+}
+function renderAgent(){
+ if(!currentUser||currentUser.role!=="agent")return;
+ const day=getDaySchedule(currentUser.id,today());
+ const slot=currentSlot();
+ const key=day[slot]||"";
+ const a=auxByKey(key);
+ document.getElementById("currentAux").textContent=a?a.label:"Not Plotted";
+ renderAgentSummary(day);
+}
+function updateLiveTimer(){
+ if(!currentUser||currentUser.role!=="agent")return;
+ const day=getDaySchedule(currentUser.id,today());
+ const slot=currentSlot();
+ const key=day[slot]||"";
+ const now=new Date();
+ const slotStart=new Date(now);slotStart.setHours(0,slot*15,0,0);
+ const elapsed=Math.max(0,Math.floor((now-slotStart)/1000));
+ document.getElementById("currentAux").textContent=auxByKey(key)?.label||"Not Plotted";
+ document.getElementById("currentTimer").textContent=fmt(elapsed);
+ renderAgentSummary(day);
+}
+function renderAgentSummary(day){
+ const counts={}; AUX.forEach(a=>counts[a.key]=0);
+ day.forEach(x=>{if(x)counts[x]++});
+ let html='<div class="kpis">';
+ AUX.slice(0,4).forEach(a=>html+=`<div class="kpi"><b>${fmtMin(counts[a.key]*15)}</b><small>${a.label}</small></div>`);
+ html+='</div>';
+ document.getElementById("todaySummary").innerHTML=html;
+ let rows="<table class='summary-table'><tr><th>AUX</th><th>Instances</th><th>Total Time</th></tr>";
+ AUX.forEach(a=>rows+=`<tr><td>${a.label}</td><td>${counts[a.key]}</td><td>${fmtMin(counts[a.key]*15)}</td></tr>`);
+ rows+="</table>";
+ document.getElementById("agentUsageTable").innerHTML=rows;
+}
+
+/* DASHBOARD */
+function renderDashboard(){
+ if(!currentUser||currentUser.role!=="admin")return;
+ const date=document.getElementById("reportDate").value||today();
+ const agents=users.filter(u=>u.role==="agent");
+ let online=0,available=0,breakMin=0,lunchMin=0;
+ let rows="";
+ agents.forEach(a=>{
+  const day=getDaySchedule(a.id,date);let counts={};AUX.forEach(x=>counts[x.key]=0);day.forEach(x=>{if(x)counts[x]++});
+  const current=date===today()?auxByKey(day[currentSlot()])?.label||"Not Plotted":"-";
+  if(date===today())online++;
+  available+=counts.available*15;breakMin+=counts.break*15;lunchMin+=counts.lunch*15;
+  let other=day.filter(x=>x&&![ "available","break","lunch"].includes(x)).length*15;
+  rows+=`<tr><td>${esc(a.name)}</td><td>${esc(a.agency)}</td><td>${esc(a.queue)}</td><td>${esc(a.shift)}</td>
+  <td>${esc(current)}</td><td>${fmtMin(counts.available*15)}</td><td>${fmtMin(counts.break*15)}</td>
+  <td>${fmtMin(counts.lunch*15)}</td><td>${fmtMin(other)}</td></tr>`;
+ });
+ document.getElementById("dashboardKpis").innerHTML=`
+ <div class="kpi"><b>${agents.length}</b><small>Total Agents</small></div>
+ <div class="kpi"><b>${online}</b><small>Today's Logged Users</small></div>
+ <div class="kpi"><b>${fmtMin(available)}</b><small>Total Available Plotted</small></div>
+ <div class="kpi"><b>${fmtMin(breakMin+lunchMin)}</b><small>Break + Lunch</small></div>`;
+ document.getElementById("dashboardBody").innerHTML=rows;
+}
+
+/* ADMIN */
+function renderAdmin(){
+ if(!currentUser||currentUser.role!=="admin")return;
+ document.getElementById("adminBody").innerHTML=users.map(u=>`<tr>
+ <td>${esc(u.name)}</td><td>${esc(u.username)}</td><td>${esc(u.email||"-")}</td><td>${esc(u.agency)}</td><td>${esc(u.unit)}</td>
+ <td>${esc(u.queue)}</td><td>${esc(u.shift)}</td><td>${esc(u.role)}</td>
+ <td>${u.role==="agent"?`<button class="action danger" onclick="deleteAgent('${u.id}')">Delete</button>`:""}</td></tr>`).join("");
+}
+function addAgent(){
+ const name=prompt("Agent Name");if(!name)return;
+ const username=prompt("Unique Username");if(!username)return;
+ if(users.some(u=>u.username===username))return alert("Username already exists.");
+ const email=prompt("Agent Email Address", username+"@company.com");if(!email)return;
+ const password=prompt("Temporary Password","Agent@123");if(!password)return;
+ const agency=prompt("Agency","RM")||"RM",unit=prompt("Unit","Support")||"Support",
+ queue=prompt("Queue","Live Chat")||"Live Chat",shift=prompt("Shift","09:00-18:00")||"09:00-18:00";
+ users.push({id:"u"+Date.now(),name,username,email,password,role:"agent",agency,unit,queue,shift,requirePasswordReset:false});
+ saveAll();populateFilters();renderPlot();renderAdmin();
+}
+function deleteAgent(id){
+ if(!confirm("Delete this agent?"))return;
+ users=users.filter(u=>u.id!==id);saveAll();populateFilters();renderPlot();renderAdmin();
+}
+
+/* EXPORT */
+function exportCSV(){
+ const date=document.getElementById("scheduleDate").value||today();
+ const lines=[["Date","Agent Name","Username","Agency","Unit","Queue","Shift Time","AUX","Start Time","End Time","Duration (Min)","Instance"].join(",")];
+ users.filter(u=>u.role==="agent").forEach(a=>{
+  const day=getDaySchedule(a.id,date);let start=null,last=null,key=null,instance=0;
+  for(let i=0;i<=96;i++){
+   const k=i<96?day[i]:"";
+   if(k!==key){
+    if(key){
+     const aux=auxByKey(key);instance++;
+     lines.push([date,a.name,a.username,a.agency,a.unit,a.queue,a.shift,aux.label,timeLabel(start),timeLabel(i),((i-start)*15),instance].map(csv).join(","));
+    }
+    key=k;start=k?i:null;
+   }
+  }
+ });
+ const blob=new Blob([lines.join("\n")],{type:"text/csv;charset=utf-8"});
+ const url=URL.createObjectURL(blob),link=document.createElement("a");
+ link.href=url;link.download=`WFM_AUX_Report_${date}.csv`;link.click();URL.revokeObjectURL(url);
+}
+
+/* HELPERS */
+function fmt(seconds){
+ const h=Math.floor(seconds/3600),m=Math.floor((seconds%3600)/60),s=seconds%60;
+ return [h,m,s].map((x,i)=>String(x).padStart(2,"0")).join(":");
+}
+function fmtMin(min){return `${Math.floor(min/60)}h ${min%60}m`}
+function csv(v){return '"'+String(v??"").replaceAll('"','""')+'"'}
+function esc(v){return String(v??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]))}
+
+/* INIT */
+document.getElementById("scheduleDate").value=today();
+document.getElementById("reportDate").value=today();
+restoreSession();
+</script>
+</body>
+</html>
