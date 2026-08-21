@@ -11,7 +11,7 @@
   --cellW:56px; --rowH:48px;
 }
 *{box-sizing:border-box}
-body{margin:0;font-family:Inter,Arial,sans-serif;background:var(--bg);color:var(--text)}
+body{margin:0;font-family:Inter,Arial,sans-serif;background:var(--bg);color:var(--text);user-select:none}
 button,input,select{font:inherit}
 button{cursor:pointer;border:0}
 .hidden{display:none!important}
@@ -31,14 +31,31 @@ button{cursor:pointer;border:0}
 
 /* Modal Overlay */
 .modal-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(15,23,42,0.7);display:flex;align-items:center;justify-content:center;z-index:1000}
-.modal-card{width:400px;background:#fff;border-radius:16px;padding:28px;box-shadow:0 20px 50px rgba(0,0,0,0.3)}
+.modal-card{width:420px;background:#fff;border-radius:16px;padding:28px;box-shadow:0 20px 50px rgba(0,0,0,0.3)}
 
-/* App */
+/* App Topbar */
 .topbar{height:64px;background:#fff;border-bottom:1px solid var(--border);display:flex;align-items:center;
-padding:0 18px;gap:14px;position:sticky;top:0;z-index:50}
-.brand{font-weight:800;font-size:18px;margin-right:auto}.topbar .clock{font-weight:700;font-variant-numeric:tabular-nums}
+padding:0 18px;gap:12px;position:sticky;top:0;z-index:50}
+.brand{font-weight:800;font-size:18px;margin-right:auto}.topbar .clock{font-weight:700;font-variant-numeric:tabular-nums;font-size:13px}
 .badge{padding:5px 9px;border-radius:999px;font-size:12px;font-weight:700;background:#eaf2ff;color:#1d4ed8}
 .container{padding:18px;max-width:100%;overflow:hidden}
+
+/* Top-Right Screenshot Style Live AUX Selector Dropdown */
+.aux-dropdown-container{position:relative;margin-left:auto;display:flex;align-items:center}
+.aux-status-pill{display:flex;align-items:center;gap:8px;background:#f1f5f9;border:1px solid #cbd5e1;
+border-radius:999px;padding:6px 14px;font-size:13px;font-weight:800;cursor:pointer;box-shadow:0 2px 5px #0001;transition:all 0.2s}
+.aux-status-pill:hover{background:#e2e8f0}
+.status-dot{width:10px;height:10px;border-radius:50%;display:inline-block}
+
+.aux-dropdown-menu{position:absolute;top:110%;right:0;width:260px;background:#fff;border:1px solid var(--border);
+border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,0.15);padding:10px;z-index:200}
+.aux-search-input{width:100%;padding:8px 12px;border:1px solid #3b82f6;border-radius:8px;margin-bottom:8px;font-size:13px;outline:none}
+.aux-option-list{max-height:260px;overflow-y:auto;display:flex;flex-direction:column;gap:4px}
+.aux-option-item{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;color:#334155}
+.aux-option-item:hover{background:#f1f5f9}
+.aux-option-item.active{background:#e2e8f0;font-weight:800}
+
+/* Toolbar & Tabs */
 .toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:14px}
 .toolbar input,.toolbar select{padding:9px;border:1px solid var(--border);border-radius:8px;background:#fff}
 .tabs{display:flex;gap:4px;margin-bottom:14px}.tab{padding:9px 14px;border-radius:8px;background:#e8edf4;font-weight:700}
@@ -54,17 +71,19 @@ padding:0 18px;gap:14px;position:sticky;top:0;z-index:50}
 border-bottom:1px solid var(--border);height:50px;padding:8px}
 .time-head{height:50px;background:#f8fafc;border-right:1px solid var(--border);border-bottom:1px solid var(--border);
 display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;writing-mode:vertical-rl;transform:rotate(180deg)}
+
 .agent-cell{position:sticky;left:0;z-index:10;background:#fff;border-right:1px solid var(--border);
-border-bottom:1px solid var(--border);height:var(--rowH);display:flex;align-items:center;padding:5px 8px;gap:8px}
-.agent-info{min-width:0}.agent-name{font-weight:700;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+border-bottom:1px solid var(--border);height:var(--rowH);display:flex;align-items:center;padding:5px 8px;gap:8px;cursor:grab}
+.agent-cell.drag-over{background:#e0f2fe;border:2px dashed #0284c7}
+.agent-info{min-width:0;pointer-events:none}.agent-name{font-weight:700;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .agent-meta{font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
 .aux-cell{height:var(--rowH);border-right:1px solid #e8ecf2;border-bottom:1px solid var(--border);
-display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;user-select:none}
+display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;user-select:none;cursor:pointer}
 .aux-cell:hover{outline:2px solid #111;outline-offset:-2px}
 .shift-cell{box-shadow:inset 0 4px 0 #1112}
-.selected{outline:2px solid #111;outline-offset:-2px}
 
-/* AUX colors */
+/* AUX Colors */
 .available{background:#22c55e;color:#063b19}.break{background:#3b82f6;color:#fff}
 .lunch{background:#f59e0b;color:#421f00}.bio{background:#06b6d4;color:#00323b}
 .breakpending{background:#fde047;color:#3f3000}.meeting{background:#a855f7;color:#fff}
@@ -113,18 +132,22 @@ display:flex;align-items:center;justify-content:center;font-size:9px;font-weight
 <div id="resetModal" class="modal-overlay hidden">
   <div class="modal-card">
     <h2 style="margin-top:0;margin-bottom:8px">Reset Password</h2>
-    <p style="color:var(--muted);font-size:13px;margin-top:0;margin-bottom:18px">Enter your registered email address to receive a 6-digit OTP.</p>
+    <p style="color:var(--muted);font-size:13px;margin-top:0;margin-bottom:18px">Enter any active email address to receive your 6-digit verification OTP.</p>
     
-    <!-- Step 1: Request OTP -->
+    <!-- Step 1: Any Active Email Input -->
     <div id="otpStep1">
       <div class="field">
-        <label>Email Address</label>
-        <input id="resetEmail" type="email" placeholder="e.g. agent001@company.com">
+        <label>Username</label>
+        <input id="resetUsername" type="text" placeholder="e.g. agent001">
+      </div>
+      <div class="field">
+        <label>Active Email Address</label>
+        <input id="resetEmail" type="email" placeholder="e.g. yourname@gmail.com">
       </div>
       <button class="primary" style="width:100%" onclick="sendOTP()">Send 6-Digit OTP</button>
     </div>
 
-    <!-- Step 2: Verify OTP & New Password -->
+    <!-- Step 2: Verify OTP & Reset Password -->
     <div id="otpStep2" class="hidden">
       <div class="field">
         <label>Enter 6-Digit OTP</label>
@@ -145,8 +168,8 @@ display:flex;align-items:center;justify-content:center;font-size:9px;font-weight
 <!-- FIRST LOGIN MANDATORY PASSWORD CHANGE MODAL -->
 <div id="forceChangeModal" class="modal-overlay hidden">
   <div class="modal-card">
-    <h2 style="margin-top:0;margin-bottom:8px">First-Time Login</h2>
-    <p style="color:var(--muted);font-size:13px;margin-top:0;margin-bottom:18px">For security reasons, you must update your password after resetting it before continuing.</p>
+    <h2 style="margin-top:0;margin-bottom:8px">First-Time Login Security</h2>
+    <p style="color:var(--muted);font-size:13px;margin-top:0;margin-bottom:18px">You must update your password after resetting it before continuing.</p>
     <div class="field">
       <label>New Password</label>
       <input id="forceNewPass" type="password" placeholder="Enter new password">
@@ -156,7 +179,7 @@ display:flex;align-items:center;justify-content:center;font-size:9px;font-weight
       <input id="forceConfirmPass" type="password" placeholder="Confirm new password">
     </div>
     <div id="forceError" class="login-error"></div>
-    <button class="primary" style="width:100%;margin-top:10px" onclick="submitFirstLoginChange()">Update Password & Continue</button>
+    <button class="primary" style="width:100%;margin-top:10px" onclick="submitFirstLoginChange()">Update Password & Access System</button>
   </div>
 </div>
 
@@ -167,7 +190,22 @@ display:flex;align-items:center;justify-content:center;font-size:9px;font-weight
   <span id="roleBadge" class="badge"></span>
   <span id="topUser" class="badge"></span>
   <span id="liveClock" class="clock"></span>
-  <button class="secondary" onclick="logout()">Logout</button>
+
+  <!-- TOP RIGHT SNAPSHOT-STYLE LIVE AUX SELECTOR DROPDOWN -->
+  <div class="aux-dropdown-container">
+    <div class="aux-status-pill" onclick="toggleAuxDropdown()">
+      <span id="pillDot" class="status-dot" style="background:#22c55e"></span>
+      <span id="pillText">Available</span>
+      <span id="pillTimer" style="margin-left:4px">00:00:00</span>
+    </div>
+    
+    <div id="auxDropdownMenu" class="aux-dropdown-menu hidden">
+      <input id="auxSearchInput" class="aux-search-input" placeholder="🔍 Search AUX status..." oninput="filterAuxDropdown()">
+      <div id="auxOptionList" class="aux-option-list"></div>
+    </div>
+  </div>
+
+  <button class="secondary" style="margin-left:8px" onclick="logout()">Logout</button>
 </header>
 
 <main class="container">
@@ -192,11 +230,12 @@ display:flex;align-items:center;justify-content:center;font-size:9px;font-weight
     </div>
 
     <div class="card">
-      <b>AUX Codes – click a 15-minute slot to plot the selected code</b>
-      <div class="legend" id="legend"></div>
-      <div style="font-size:12px;color:#667085;margin-top:8px">
-        Admin/WFM: select an AUX code and click cells. Agents have read-only schedule access.
+      <b>AUX Codes & Schedule Tools:</b>
+      <div style="font-size:12px;color:#667085;margin-top:4px">
+        • <b>Click & Drag across slots</b> to plot multiple 15-minute cells in one swipe.<br>
+        • <b>Drag & Drop Agent Names</b> to copy an agent's entire daily schedule onto another agent.
       </div>
+      <div class="legend" id="legend" style="margin-top:10px"></div>
     </div>
 
     <div class="plot-wrap"><div id="plot" class="plot"></div></div>
@@ -212,8 +251,7 @@ display:flex;align-items:center;justify-content:center;font-size:9px;font-weight
           <div style="text-align:right"><div style="color:#667085;font-size:12px">Running Time</div><div id="currentTimer" class="status-timer">00:00:00</div></div>
         </div>
         <p style="font-size:12px;color:#667085">
-          Timer follows the current 15-minute plotted AUX slot and the actual system time.
-          The timer resets automatically when the AUX changes.
+          Select or change your status anytime via the top-right status dropdown. The timer updates live and tracks running AUX duration.
         </p>
       </div>
       <div class="card">
@@ -247,7 +285,6 @@ display:flex;align-items:center;justify-content:center;font-size:9px;font-weight
   <section id="adminSection" class="hidden">
     <div class="card">
       <h3>Agent & Credential Management</h3>
-      <p style="font-size:12px;color:#667085">Demo/static mode stores users in browser localStorage. Do not use this approach for production passwords.</p>
       <div class="table-scroll"><table class="data-table"><thead><tr>
         <th>Name</th><th>Username</th><th>Email</th><th>Agency</th><th>Unit</th><th>Queue</th><th>Shift</th><th>Role</th><th>Action</th>
       </tr></thead><tbody id="adminBody"></tbody></table></div>
@@ -258,23 +295,23 @@ display:flex;align-items:center;justify-content:center;font-size:9px;font-weight
 
 <script>
 /* ==========================================================
-   WFM SCHEDULE PLOTTER - STATIC GITHUB PAGES DEMO
+   WFM SCHEDULE PLOTTER - ENHANCED FULL IMPLEMENTATION
    ========================================================== */
 
 const AUX = [
- {key:"available", label:"Available", short:"AV"},
- {key:"break", label:"Break", short:"BR"},
- {key:"lunch", label:"Lunch", short:"LU"},
- {key:"bio", label:"Bio Break", short:"BB"},
- {key:"breakpending", label:"Break Pending", short:"BP"},
- {key:"meeting", label:"Team Meeting", short:"TM"},
- {key:"tlfeedback", label:"TL Feedback", short:"TL"},
- {key:"qafeedback", label:"QA Feedback", short:"QA"},
- {key:"nht", label:"NHT Training", short:"NH"},
- {key:"pkt", label:"PKT Training", short:"PK"},
- {key:"training", label:"Training", short:"TR"},
- {key:"coaching", label:"Coaching", short:"CO"},
- {key:"offline", label:"Offline", short:"OF"}
+ {key:"available", label:"Available", short:"AV", color:"#22c55e"},
+ {key:"break", label:"Break", short:"BR", color:"#3b82f6"},
+ {key:"lunch", label:"Lunch", short:"LU", color:"#f59e0b"},
+ {key:"bio", label:"Bio Break", short:"BB", color:"#06b6d4"},
+ {key:"breakpending", label:"Break Pending", short:"BP", color:"#fde047"},
+ {key:"meeting", label:"Team Meeting", short:"TM", color:"#a855f7"},
+ {key:"tlfeedback", label:"TL Feedback", short:"TL", color:"#ec4899"},
+ {key:"qafeedback", label:"QA Feedback", short:"QA", color:"#8b5cf6"},
+ {key:"nht", label:"NHT Training", short:"NH", color:"#14b8a6"},
+ {key:"pkt", label:"PKT Training", short:"PK", color:"#0ea5e9"},
+ {key:"training", label:"Training", short:"TR", color:"#6366f1"},
+ {key:"coaching", label:"Coaching", short:"CO", color:"#f97316"},
+ {key:"offline", label:"Offline", short:"OF", color:"#64748b"}
 ];
 
 const defaultUsers = [
@@ -287,11 +324,17 @@ const defaultUsers = [
 
 let users = JSON.parse(localStorage.getItem("wfm_users") || "null") || defaultUsers;
 let schedules = JSON.parse(localStorage.getItem("wfm_schedules") || "{}");
-let usage = JSON.parse(localStorage.getItem("wfm_usage") || "{}");
 let currentUser = null;
 let selectedAux = "available";
 let selectedDate = today();
 let timerInterval = null;
+
+// Live AUX State Tracker
+let currentActiveAux = "available";
+let auxStartTime = Date.now();
+
+// Drag-to-plot mouse state
+let isMouseDown = false;
 
 // OTP Reset Tracking
 let generatedOTP = null;
@@ -304,7 +347,6 @@ function today(){
 function saveAll(){
  localStorage.setItem("wfm_users",JSON.stringify(users));
  localStorage.setItem("wfm_schedules",JSON.stringify(schedules));
- localStorage.setItem("wfm_usage",JSON.stringify(usage));
 }
 
 /* AUTHENTICATION & LOGIN */
@@ -317,7 +359,6 @@ function login(){
  currentUser=found;
  sessionStorage.setItem("wfm_current_user",found.id);
 
- // Check if user was flagged to change password on first login
  if(currentUser.requirePasswordReset){
    document.getElementById("forceChangeModal").classList.remove("hidden");
    return;
@@ -347,6 +388,8 @@ function initializeAppView(){
  document.getElementById("topUser").textContent=currentUser.name;
  document.getElementById("scheduleDate").value=selectedDate;
  document.getElementById("reportDate").value=selectedDate;
+ 
+ changeActiveAux("available");
  applyPermissions();
  populateFilters();
  renderLegend();
@@ -358,11 +401,12 @@ function initializeAppView(){
  showTab(currentUser.role==="agent"?"agent":"plot");
 }
 
-/* RESET PASSWORD MODAL FUNCTIONS */
+/* PASSWORD RESET - ANY ACTIVE EMAIL ALLOWED */
 function openResetModal(){
  document.getElementById("resetModal").classList.remove("hidden");
  document.getElementById("otpStep1").classList.remove("hidden");
  document.getElementById("otpStep2").classList.add("hidden");
+ document.getElementById("resetUsername").value="";
  document.getElementById("resetEmail").value="";
  document.getElementById("otpInput").value="";
  document.getElementById("newPassInput").value="";
@@ -375,19 +419,33 @@ function closeResetModal(){
 }
 
 function sendOTP(){
+ const uname=document.getElementById("resetUsername").value.trim();
  const email=document.getElementById("resetEmail").value.trim();
- const found=users.find(x=>x.email&&x.email.toLowerCase()===email.toLowerCase());
- if(!found){
-   document.getElementById("resetError").textContent="No registered user found with this email address.";
+ 
+ if(!uname){
+   document.getElementById("resetError").textContent="Please enter your username.";
    return;
  }
+ if(!email || !email.includes("@")){
+   document.getElementById("resetError").textContent="Please enter a valid active email address.";
+   return;
+ }
+
+ const found=users.find(x=>x.username.toLowerCase()===uname.toLowerCase());
+ if(!found){
+   document.getElementById("resetError").textContent="Username not found in system.";
+   return;
+ }
+
  targetResetUser=found;
+ targetResetUser.email=email; // Bind active email
  generatedOTP=String(Math.floor(100000 + Math.random() * 900000));
- alert(`[DEMO SYSTEM SIMULATION]
+ 
+ alert(`[DEMO OTP SERVICE]
 
-An email containing your 6-digit OTP code has been dispatched to: ${email}
+OTP sent successfully to active email: ${email}
 
-Your OTP Code is: ${generatedOTP}`);
+Your 6-Digit OTP is: ${generatedOTP}`);
  
  document.getElementById("otpStep1").classList.add("hidden");
  document.getElementById("otpStep2").classList.remove("hidden");
@@ -406,54 +464,55 @@ function verifyAndReset(){
    return;
  }
  
- // Update user password and flag for first-time login update
  targetResetUser.password=newPass;
  targetResetUser.requirePasswordReset=true;
  saveAll();
  
- alert("Password successfully reset! On your next login, you will be prompted to set your final password.");
+ alert("Password reset successful! Please log in with your temporary password.");
  closeResetModal();
 }
 
-function logout(){
- sessionStorage.removeItem("wfm_current_user");
- currentUser=null;
- if(timerInterval)clearInterval(timerInterval);
- document.getElementById("app").classList.add("hidden");
- document.getElementById("loginScreen").classList.remove("hidden");
-}
-function restoreSession(){
- const id=sessionStorage.getItem("wfm_current_user");
- if(id){
-   const found=users.find(x=>x.id===id);
-   if(found){
-     currentUser=found;
-     if(!currentUser.requirePasswordReset){
-       document.getElementById("loginUser").value=found.username;
-       document.getElementById("loginPass").value=found.password;
-       login();
-     }
-   }
+/* TOP-RIGHT SNAPSHOT STYLE DROPDOWN */
+function toggleAuxDropdown(){
+ const menu=document.getElementById("auxDropdownMenu");
+ menu.classList.toggle("hidden");
+ if(!menu.classList.contains("hidden")){
+   document.getElementById("auxSearchInput").focus();
+   renderAuxDropdownList(AUX);
  }
 }
-function applyPermissions(){
- const isAdmin=currentUser.role==="admin";
- document.querySelectorAll(".adminOnly").forEach(x=>x.classList.toggle("hidden",!isAdmin));
- document.getElementById("adminTab").classList.toggle("hidden",!isAdmin);
- document.getElementById("dashboardTab").classList.toggle("hidden",!isAdmin);
-}
-function showTab(tab){
- ["plot","agent","dashboard","admin"].forEach(t=>{
-  document.getElementById(t+"Section").classList.toggle("hidden",t!==tab);
-  const btn=document.getElementById(t+"Tab"); if(btn)btn.classList.toggle("active",t===tab);
- });
- if(tab==="plot")renderPlot();
- if(tab==="agent")renderAgent();
- if(tab==="dashboard")renderDashboard();
- if(tab==="admin")renderAdmin();
+
+function filterAuxDropdown(){
+ const query=document.getElementById("auxSearchInput").value.toLowerCase();
+ const filtered=AUX.filter(a=>a.label.toLowerCase().includes(query));
+ renderAuxDropdownList(filtered);
 }
 
-/* CLOCK */
+function renderAuxDropdownList(items){
+ const list=document.getElementById("auxOptionList");
+ list.innerHTML="";
+ items.forEach(a=>{
+  const item=document.createElement("div");
+  item.className="aux-option-item "+(a.key===currentActiveAux?"active":"");
+  item.innerHTML=`<span class="status-dot" style="background:${a.color}"></span> ${a.label}`;
+  item.onclick=()=>{
+    changeActiveAux(a.key);
+    document.getElementById("auxDropdownMenu").classList.add("hidden");
+  };
+  list.appendChild(item);
+ });
+}
+
+function changeActiveAux(key){
+ currentActiveAux=key;
+ auxStartTime=Date.now();
+ const a=auxByKey(key);
+ document.getElementById("pillDot").style.background=a.color;
+ document.getElementById("pillText").textContent=a.label;
+ updateLiveTimer();
+}
+
+/* CLOCK & RUNNING TIMERS */
 function startClock(){
  function tick(){
   const d=new Date();
@@ -463,7 +522,18 @@ function startClock(){
  tick(); if(timerInterval)clearInterval(timerInterval); timerInterval=setInterval(tick,1000);
 }
 
-/* LEGEND */
+function updateLiveTimer(){
+ const elapsedSeconds=Math.floor((Date.now()-auxStartTime)/1000);
+ const formattedTime=fmt(elapsedSeconds);
+ document.getElementById("pillTimer").textContent=formattedTime;
+ 
+ if(currentUser && currentUser.role==="agent"){
+   document.getElementById("currentAux").textContent=auxByKey(currentActiveAux)?.label||"-";
+   document.getElementById("currentTimer").textContent=formattedTime;
+ }
+}
+
+/* LEGEND & FILTERS */
 function renderLegend(){
  const box=document.getElementById("legend"); box.innerHTML="";
  AUX.forEach(a=>{
@@ -476,7 +546,6 @@ function renderLegend(){
  });
 }
 
-/* FILTERS */
 function populateFilters(){
  const agencies=[...new Set(users.filter(u=>u.role==="agent").map(u=>u.agency))];
  const queues=[...new Set(users.filter(u=>u.role==="agent").map(u=>u.queue))];
@@ -484,7 +553,7 @@ function populateFilters(){
  document.getElementById("queueFilter").innerHTML='<option value="">All Queues</option>'+queues.map(x=>`<option>${esc(x)}</option>`).join("");
 }
 
-/* SCHEDULE DATA */
+/* SCHEDULE DATA & PLOTTER WITH CLICK-DRAG & COPY-SCHEDULE */
 function dayKey(date,userId){return date+"_"+userId}
 function getDaySchedule(userId,date){
  const key=dayKey(date,userId);
@@ -496,18 +565,10 @@ function timeLabel(i){
  const h=Math.floor(i/4),m=(i%4)*15;
  return String(h).padStart(2,"0")+":"+String(m).padStart(2,"0");
 }
-function parseShift(shift){
- const m=shift.match(/(\d{1,2}):(\d{2})-(\d{1,2}):(\d{2})/);
- if(!m)return null;
- return {start:+m[1]*60 + +m[2],end:+m[3]*60 + +m[4]};
-}
-function inShift(i,shift){
- const s=parseShift(shift);if(!s)return false;
- const t=i*15;
- return s.start<=s.end ? t>=s.start&&t<s.end : t>=s.start||t<s.end;
-}
 
-/* PLOTTER */
+document.addEventListener("mousedown",()=>isMouseDown=true);
+document.addEventListener("mouseup",()=>isMouseDown=false);
+
 function renderPlot(){
  const plot=document.getElementById("plot");
  const date=document.getElementById("scheduleDate").value||today();
@@ -521,35 +582,62 @@ function renderPlot(){
    (!agency||u.agency===agency)&&(!queue||u.queue===queue)
  );
  plot.innerHTML="";
+
  const head=document.createElement("div");head.className="agent-head";
- head.innerHTML="<b>Agent</b><br><small>Name / Agency / Unit / Queue / Shift</small>";plot.appendChild(head);
+ head.innerHTML="<b>Agent</b><br><small>Drag Agent Header to Copy Schedule</small>";plot.appendChild(head);
  for(let i=0;i<96;i++){
   const h=document.createElement("div");h.className="time-head";h.textContent=timeLabel(i);plot.appendChild(h);
  }
+
  agents.forEach(agent=>{
+  // Agent header drag-and-drop to copy schedules
   const ac=document.createElement("div");ac.className="agent-cell";
-  ac.innerHTML=`<div class="agent-info"><div class="agent-name">${esc(agent.name)}</div>
-   <div class="agent-meta">${esc(agent.agency)} • ${esc(agent.unit)} • ${esc(agent.queue)} • ${esc(agent.shift)}</div></div>`;
+  ac.draggable=currentUser.role==="admin";
+  ac.innerHTML=`<div class="agent-info"><div class="agent-name">⋮⋮ ${esc(agent.name)}</div>
+   <div class="agent-meta">${esc(agent.agency)} • ${esc(agent.queue)}</div></div>`;
+  
+  if(currentUser.role==="admin"){
+    ac.ondragstart=(e)=>e.dataTransfer.setData("text/plain",agent.id);
+    ac.ondragover=(e)=>{e.preventDefault();ac.classList.add("drag-over")};
+    ac.ondragleave=()=>ac.classList.remove("drag-over");
+    ac.ondrop=(e)=>{
+      e.preventDefault();
+      ac.classList.remove("drag-over");
+      const srcId=e.dataTransfer.getData("text/plain");
+      if(srcId && srcId!==agent.id){
+        schedules[dayKey(date,agent.id)]=[...getDaySchedule(srcId,date)];
+        saveAll();
+        renderPlot();
+        alert(`Copied full schedule from ${users.find(u=>u.id===srcId)?.name} to ${agent.name}!`);
+      }
+    };
+  }
   plot.appendChild(ac);
+
   const day=getDaySchedule(agent.id,date);
   for(let i=0;i<96;i++){
    const c=document.createElement("div"); const key=day[i];
-   c.className="aux-cell "+(key||"empty")+(inShift(i,agent.shift)?" shift-cell":"");
+   c.className="aux-cell "+(key||"empty");
    c.textContent=key?(auxByKey(key)?.short||""):"";
    c.title=`${timeLabel(i)} - ${auxByKey(key)?.label||"Unplotted"}`;
+   
    if(currentUser.role==="admin"){
-    c.onclick=()=>setSlot(agent.id,date,i);
+    c.onmousedown=()=>{setSlotDirect(agent.id,date,i,selectedAux)};
+    c.onmouseenter=()=>{if(isMouseDown)setSlotDirect(agent.id,date,i,selectedAux)};
    }
    plot.appendChild(c);
   }
  });
 }
-function setSlot(agentId,date,i){
+
+function setSlotDirect(agentId,date,i,auxKey){
  const day=getDaySchedule(agentId,date);
- day[i]=day[i]===selectedAux ? "" : selectedAux;
+ day[i]=auxKey;
  schedules[dayKey(date,agentId)]=day;
- saveAll(); renderPlot();
+ saveAll();
+ renderPlot();
 }
+
 function clearSelectedAgent(){
  if(currentUser.role!=="admin")return;
  const name=prompt("Enter agent username to clear:");
@@ -560,32 +648,24 @@ function clearSelectedAgent(){
 }
 function saveSchedules(){saveAll();alert("Schedule saved in this browser.");}
 
-/* AGENT STATUS */
-function currentSlot(){
- const now=new Date(), minutes=now.getHours()*60+now.getMinutes();
- return Math.floor(minutes/15);
+/* OTHER VIEWS */
+function showTab(tab){
+ ["plot","agent","dashboard","admin"].forEach(t=>{
+  document.getElementById(t+"Section").classList.toggle("hidden",t!==tab);
+  const btn=document.getElementById(t+"Tab"); if(btn)btn.classList.toggle("active",t===tab);
+ });
+ if(tab==="plot")renderPlot();
+ if(tab==="agent")renderAgent();
+ if(tab==="dashboard")renderDashboard();
+ if(tab==="admin")renderAdmin();
 }
+
 function renderAgent(){
  if(!currentUser||currentUser.role!=="agent")return;
  const day=getDaySchedule(currentUser.id,today());
- const slot=currentSlot();
- const key=day[slot]||"";
- const a=auxByKey(key);
- document.getElementById("currentAux").textContent=a?a.label:"Not Plotted";
  renderAgentSummary(day);
 }
-function updateLiveTimer(){
- if(!currentUser||currentUser.role!=="agent")return;
- const day=getDaySchedule(currentUser.id,today());
- const slot=currentSlot();
- const key=day[slot]||"";
- const now=new Date();
- const slotStart=new Date(now);slotStart.setHours(0,slot*15,0,0);
- const elapsed=Math.max(0,Math.floor((now-slotStart)/1000));
- document.getElementById("currentAux").textContent=auxByKey(key)?.label||"Not Plotted";
- document.getElementById("currentTimer").textContent=fmt(elapsed);
- renderAgentSummary(day);
-}
+
 function renderAgentSummary(day){
  const counts={}; AUX.forEach(a=>counts[a.key]=0);
  day.forEach(x=>{if(x)counts[x]++});
@@ -599,7 +679,6 @@ function renderAgentSummary(day){
  document.getElementById("agentUsageTable").innerHTML=rows;
 }
 
-/* DASHBOARD */
 function renderDashboard(){
  if(!currentUser||currentUser.role!=="admin")return;
  const date=document.getElementById("reportDate").value||today();
@@ -608,12 +687,11 @@ function renderDashboard(){
  let rows="";
  agents.forEach(a=>{
   const day=getDaySchedule(a.id,date);let counts={};AUX.forEach(x=>counts[x.key]=0);day.forEach(x=>{if(x)counts[x]++});
-  const current=date===today()?auxByKey(day[currentSlot()])?.label||"Not Plotted":"-";
   if(date===today())online++;
   available+=counts.available*15;breakMin+=counts.break*15;lunchMin+=counts.lunch*15;
   let other=day.filter(x=>x&&![ "available","break","lunch"].includes(x)).length*15;
   rows+=`<tr><td>${esc(a.name)}</td><td>${esc(a.agency)}</td><td>${esc(a.queue)}</td><td>${esc(a.shift)}</td>
-  <td>${esc(current)}</td><td>${fmtMin(counts.available*15)}</td><td>${fmtMin(counts.break*15)}</td>
+  <td>${esc(auxByKey(currentActiveAux)?.label)}</td><td>${fmtMin(counts.available*15)}</td><td>${fmtMin(counts.break*15)}</td>
   <td>${fmtMin(counts.lunch*15)}</td><td>${fmtMin(other)}</td></tr>`;
  });
  document.getElementById("dashboardKpis").innerHTML=`
@@ -624,7 +702,6 @@ function renderDashboard(){
  document.getElementById("dashboardBody").innerHTML=rows;
 }
 
-/* ADMIN */
 function renderAdmin(){
  if(!currentUser||currentUser.role!=="admin")return;
  document.getElementById("adminBody").innerHTML=users.map(u=>`<tr>
@@ -632,6 +709,7 @@ function renderAdmin(){
  <td>${esc(u.queue)}</td><td>${esc(u.shift)}</td><td>${esc(u.role)}</td>
  <td>${u.role==="agent"?`<button class="action danger" onclick="deleteAgent('${u.id}')">Delete</button>`:""}</td></tr>`).join("");
 }
+
 function addAgent(){
  const name=prompt("Agent Name");if(!name)return;
  const username=prompt("Unique Username");if(!username)return;
@@ -643,12 +721,12 @@ function addAgent(){
  users.push({id:"u"+Date.now(),name,username,email,password,role:"agent",agency,unit,queue,shift,requirePasswordReset:false});
  saveAll();populateFilters();renderPlot();renderAdmin();
 }
+
 function deleteAgent(id){
  if(!confirm("Delete this agent?"))return;
  users=users.filter(u=>u.id!==id);saveAll();populateFilters();renderPlot();renderAdmin();
 }
 
-/* EXPORT */
 function exportCSV(){
  const date=document.getElementById("scheduleDate").value||today();
  const lines=[["Date","Agent Name","Username","Agency","Unit","Queue","Shift Time","AUX","Start Time","End Time","Duration (Min)","Instance"].join(",")];
@@ -670,6 +748,21 @@ function exportCSV(){
  link.href=url;link.download=`WFM_AUX_Report_${date}.csv`;link.click();URL.revokeObjectURL(url);
 }
 
+function logout(){
+ sessionStorage.removeItem("wfm_current_user");
+ currentUser=null;
+ if(timerInterval)clearInterval(timerInterval);
+ document.getElementById("app").classList.add("hidden");
+ document.getElementById("loginScreen").classList.remove("hidden");
+}
+
+function applyPermissions(){
+ const isAdmin=currentUser.role==="admin";
+ document.querySelectorAll(".adminOnly").forEach(x=>x.classList.toggle("hidden",!isAdmin));
+ document.getElementById("adminTab").classList.toggle("hidden",!isAdmin);
+ document.getElementById("dashboardTab").classList.toggle("hidden",!isAdmin);
+}
+
 /* HELPERS */
 function fmt(seconds){
  const h=Math.floor(seconds/3600),m=Math.floor((seconds%3600)/60),s=seconds%60;
@@ -682,7 +775,6 @@ function esc(v){return String(v??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&l
 /* INIT */
 document.getElementById("scheduleDate").value=today();
 document.getElementById("reportDate").value=today();
-restoreSession();
 </script>
 </body>
 </html>
