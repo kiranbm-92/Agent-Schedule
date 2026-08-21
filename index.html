@@ -8,7 +8,7 @@
 :root{
   --bg:#f5f7fb; --card:#fff; --text:#172033; --muted:#667085;
   --border:#dfe4ec; --primary:#2563eb; --danger:#dc2626;
-  --rowH:52px;
+  --rowH:52px; --cellW:56px;
 }
 *{box-sizing:border-box}
 body{margin:0;font-family:Inter,Arial,sans-serif;background:var(--bg);color:var(--text);user-select:none}
@@ -65,7 +65,7 @@ border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,0.15);padding:10px;z-index:
 .card{background:#fff;border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:14px}
 .legend{display:flex;gap:7px;flex-wrap:wrap}.legend span{padding:6px 9px;border-radius:6px;font-size:12px;font-weight:700}
 
-/* Continuous 24-Hour Timeline Plotter */
+/* MODE 1: Continuous 24-Hour Timeline Plotter */
 .plot-wrap{border:1px solid var(--border);border-radius:10px;background:#fff;overflow:auto;max-height:70vh}
 .plot-grid{display:grid;grid-template-columns:360px 1440px;min-width:1800px}
 .timeline-header{display:flex;height:45px;background:#f8fafc;border-bottom:1px solid var(--border);border-right:1px solid var(--border)}
@@ -83,6 +83,12 @@ border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,0.15);padding:10px;z-index:
 .aux-block{position:absolute;top:6px;bottom:6px;border-radius:6px;padding:2px 6px;font-size:10px;font-weight:800;color:#fff;display:flex;align-items:center;justify-content:space-between;box-shadow:0 2px 4px #0002;cursor:pointer;overflow:hidden;white-space:nowrap}
 .aux-block .delete-btn{font-size:11px;font-weight:900;margin-left:4px;cursor:pointer;background:rgba(0,0,0,0.25);border-radius:50%;width:14px;height:14px;display:inline-flex;align-items:center;justify-content:center}
 .aux-block .delete-btn:hover{background:rgba(220,38,38,0.9)}
+
+/* MODE 2: 15-Minute Grid Interval Plotter */
+.plot-grid-15m{display:grid;grid-template-columns:360px repeat(96,var(--cellW));min-width:5760px}
+.time-head-15m{height:45px;background:#f8fafc;border-right:1px solid var(--border);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;writing-mode:vertical-rl;transform:rotate(180deg)}
+.aux-cell-15m{height:var(--rowH);border-right:1px solid #e8ecf2;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;user-select:none;cursor:pointer}
+.aux-cell-15m:hover{outline:2px solid #111;outline-offset:-2px}
 
 /* AUX Colors */
 .available{background:#22c55e;color:#063b19}.break{background:#3b82f6;color:#fff}
@@ -250,6 +256,13 @@ border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,0.15);padding:10px;z-index:
       <input id="searchAgent" placeholder="Search agent..." oninput="renderPlot()">
       <select id="agencyFilter" onchange="renderPlot()"><option value="">All Agencies</option></select>
       <select id="queueFilter" onchange="renderPlot()"><option value="">All Queues</option></select>
+      
+      <!-- PLOTTER VIEW MODE TOGGLE -->
+      <select id="plotModeSelect" onchange="switchPlotMode()" style="font-weight:700;border:1px solid #2563eb;color:#2563eb">
+        <option value="timeline">24-Hour Continuous Timeline View</option>
+        <option value="grid15m">15-Minute Grid Interval Plotter View</option>
+      </select>
+
       <button class="primary adminOnly" onclick="addAgent()">+ Add Agent</button>
       <button class="secondary adminOnly" onclick="clearSelectedAgent()">Clear Selected Day</button>
       <button class="secondary adminOnly" onclick="saveSchedules()">Save Schedule</button>
@@ -257,18 +270,18 @@ border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,0.15);padding:10px;z-index:
     </div>
 
     <div class="card">
-      <b>Interactive 24-Hour Open Schedule Plotter:</b>
-      <div style="font-size:12px;color:#667085;margin-top:4px">
-        • <b>Double-Click anywhere on track:</b> Opens time selection modal to plot precise start & end times.<br>
-        • <b>Remove AUX Code:</b> Click the <b>✕</b> icon on any plotted AUX block or right-click to delete it.<br>
-        • <b>Copy / Paste Schedule:</b> Click <b>Copy</b> on an agent row, then click <b>Paste</b> on target agents.
+      <b>Interactive Schedule Plotter Tools:</b>
+      <div id="modeInstructionText" style="font-size:12px;color:#667085;margin-top:4px">
+        • <b>24-Hour Timeline:</b> Double-click to set exact start/end time, or click <b>✕</b> on any block to delete.<br>
+        • <b>15-Min Grid Plotter:</b> Click or drag across 15-minute intervals to plot AUX codes directly.<br>
+        • <b>Copy / Paste:</b> Click <b>Copy</b> on an agent row, then click <b>Paste</b> on target agents.
       </div>
       <div class="legend" id="legend" style="margin-top:10px"></div>
     </div>
 
-    <div class="plot-wrap">
+    <!-- VIEW 1: CONTINUOUS TIMELINE -->
+    <div id="timelinePlotWrap" class="plot-wrap">
       <div class="plot-grid">
-        <!-- Column 1: Agent Header -->
         <div>
           <div class="agent-head-cell">
             <span>Agent Info</span>
@@ -276,13 +289,16 @@ border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,0.15);padding:10px;z-index:
           </div>
           <div id="agentRowsContainer"></div>
         </div>
-        
-        <!-- Column 2: 24-Hour Continuous Timeline Track -->
         <div>
           <div class="timeline-header" id="timelineHeader"></div>
           <div id="timelineTracksContainer"></div>
         </div>
       </div>
+    </div>
+
+    <!-- VIEW 2: 15-MINUTE INTERVAL GRID PLOTTER -->
+    <div id="grid15mPlotWrap" class="plot-wrap hidden">
+      <div id="grid15mContainer" class="plot-grid-15m"></div>
     </div>
   </section>
 
@@ -347,7 +363,7 @@ border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,0.15);padding:10px;z-index:
 
 <script>
 /* ==========================================================
-   WFM SCHEDULE PLOTTER - UNIVERSAL LOGIN & TIME SELECTION
+   WFM SCHEDULE PLOTTER - DUAL MODE (24H CONTINUOUS & 15-MIN GRID)
    ========================================================== */
 
 const AUX = [
@@ -376,12 +392,15 @@ const defaultUsers = [
 
 let users = JSON.parse(localStorage.getItem("wfm_users") || "null") || defaultUsers;
 let continuousSchedules = JSON.parse(localStorage.getItem("wfm_continuous_schedules") || "{}");
+let grid15mSchedules = JSON.parse(localStorage.getItem("wfm_grid15m_schedules") || "{}");
 let auxLogs = JSON.parse(localStorage.getItem("wfm_aux_logs") || "{}");
 
 let currentUser = null;
 let selectedAux = "available";
 let selectedDate = today();
 let timerInterval = null;
+let activePlotMode = "timeline"; // 'timeline' or 'grid15m'
+let isMouseDown = false;
 
 // Copy / Paste Buffer
 let copiedScheduleBuffer = null;
@@ -400,8 +419,12 @@ function today(){
 function saveAll(){
  localStorage.setItem("wfm_users",JSON.stringify(users));
  localStorage.setItem("wfm_continuous_schedules",JSON.stringify(continuousSchedules));
+ localStorage.setItem("wfm_grid15m_schedules",JSON.stringify(grid15mSchedules));
  localStorage.setItem("wfm_aux_logs",JSON.stringify(auxLogs));
 }
+
+document.addEventListener("mousedown",()=>isMouseDown=true);
+document.addEventListener("mouseup",()=>isMouseDown=false);
 
 /* UNIVERSAL CREDENTIAL LOGIN */
 function login(){
@@ -413,7 +436,6 @@ function login(){
    return;
  }
 
- // Universal Auth: Find existing user or dynamically create a user session for ANY entered credentials
  let found=users.find(x=>x.username.toLowerCase()===u.toLowerCase());
  if(!found){
    const isAdmin=u.toLowerCase().includes("admin");
@@ -546,13 +568,25 @@ function verifyAndReset(){
  closeResetModal();
 }
 
+/* SWITCH PLOTTER MODES */
+function switchPlotMode(){
+ activePlotMode=document.getElementById("plotModeSelect").value;
+ if(activePlotMode==="timeline"){
+   document.getElementById("timelinePlotWrap").classList.remove("hidden");
+   document.getElementById("grid15mPlotWrap").classList.add("hidden");
+ } else {
+   document.getElementById("timelinePlotWrap").classList.add("hidden");
+   document.getElementById("grid15mPlotWrap").classList.remove("hidden");
+ }
+ renderPlot();
+}
+
 /* DOUBLE CLICK TIME SELECTION MODAL */
 function openTimePlotModal(agentId, clickedMin){
  targetPlotAgentId=agentId;
  const agent=users.find(u=>u.id===agentId);
  document.getElementById("modalAgentName").textContent=agent?.name||"Agent";
  
- // Populate AUX dropdown
  const sel=document.getElementById("modalAuxSelect");
  sel.innerHTML=AUX.map(a=>`<option value="${a.key}">${a.label}</option>`).join("");
  sel.value=selectedAux;
@@ -598,7 +632,7 @@ function confirmTimePlot(){
  closeTimePlotModal();
 }
 
-/* TOP-RIGHT SNAPSHOT STYLE DROPDOWN */
+/* TOP-RIGHT SNAPSHOT DROPDOWN */
 function toggleAuxDropdown(){
  const menu=document.getElementById("auxDropdownMenu");
  menu.classList.toggle("hidden");
@@ -678,18 +712,7 @@ function updateLiveTimer(){
  }
 }
 
-/* 24-HOUR CONTINUOUS TIMELINE ENGINE */
-function renderTimelineHeader(){
- const hdr=document.getElementById("timelineHeader");
- hdr.innerHTML="";
- for(let h=0; h<24; h++){
-   const tick=document.createElement("div");
-   tick.className="hour-tick";
-   tick.textContent=String(h).padStart(2,"0")+":00";
-   hdr.appendChild(tick);
- }
-}
-
+/* SCHEDULE DATA RETRIEVAL */
 function dayKey(date,userId){return date+"_"+userId}
 
 function getAgentBlocks(userId, date){
@@ -698,6 +721,18 @@ function getAgentBlocks(userId, date){
  return continuousSchedules[key];
 }
 
+function get15mGridSchedule(userId, date){
+ const key=dayKey(date,userId);
+ if(!grid15mSchedules[key]) grid15mSchedules[key]=Array(96).fill("");
+ return grid15mSchedules[key];
+}
+
+function timeLabel15m(i){
+ const h=Math.floor(i/4), m=(i%4)*15;
+ return String(h).padStart(2,"0")+":"+String(m).padStart(2,"0");
+}
+
+/* RENDER PLOTTER (DUAL MODE) */
 function renderPlot(){
  const date=document.getElementById("scheduleDate").value||today();
  selectedDate=date;
@@ -710,13 +745,32 @@ function renderPlot(){
    (!agency||u.agency===agency)&&(!queue||u.queue===queue)
  );
 
+ if(activePlotMode==="timeline"){
+   renderContinuousTimelineView(agents, date);
+ } else {
+   render15mGridView(agents, date);
+ }
+}
+
+/* VIEW 1: CONTINUOUS 24H TIMELINE */
+function renderTimelineHeader(){
+ const hdr=document.getElementById("timelineHeader");
+ hdr.innerHTML="";
+ for(let h=0; h<24; h++){
+   const tick=document.createElement("div");
+   tick.className="hour-tick";
+   tick.textContent=String(h).padStart(2,"0")+":00";
+   hdr.appendChild(tick);
+ }
+}
+
+function renderContinuousTimelineView(agents, date){
  const labelsCol=document.getElementById("agentRowsContainer");
  const tracksCol=document.getElementById("timelineTracksContainer");
  labelsCol.innerHTML="";
  tracksCol.innerHTML="";
 
  agents.forEach(agent=>{
-   // Column 1: Agent Info Row
    const lbl=document.createElement("div");
    lbl.className="agent-row-label";
    lbl.innerHTML=`<div class="agent-info"><div class="agent-name">${esc(agent.name)}</div>
@@ -728,11 +782,9 @@ function renderPlot(){
      </div>`:""}`;
    labelsCol.appendChild(lbl);
 
-   // Column 2: Continuous 24-Hour Timeline Track
    const track=document.createElement("div");
    track.className="timeline-track-container";
    
-   // Background grid
    const bgGrid=document.createElement("div");
    bgGrid.className="timeline-grid-overlay";
    for(let h=0; h<24; h++){
@@ -742,7 +794,6 @@ function renderPlot(){
    }
    track.appendChild(bgGrid);
 
-   // Render Plotted Blocks
    const blocks=getAgentBlocks(agent.id, date);
    blocks.forEach((blk, idx)=>{
      const blockEl=document.createElement("div");
@@ -754,7 +805,6 @@ function renderPlot(){
       ${currentUser.role==="admin"?`<span class="delete-btn" title="Delete AUX Block" onclick="deleteAuxBlock(event, '${agent.id}', '${date}', ${idx})">✕</span>`:""}`;
      
      if(currentUser.role==="admin"){
-       // Right-click to delete
        blockEl.oncontextmenu=(e)=>{
          e.preventDefault();
          deleteAuxBlock(e, agent.id, date, idx);
@@ -763,7 +813,6 @@ function renderPlot(){
      track.appendChild(blockEl);
    });
 
-   // Double-Click on Track to open Exact Time Plot Modal
    if(currentUser.role==="admin"){
      track.ondblclick=(e)=>{
        if(e.target!==track && !e.target.classList.contains("timeline-grid-overlay")) return;
@@ -772,9 +821,55 @@ function renderPlot(){
        openTimePlotModal(agent.id, clickedMin);
      };
    }
-
    tracksCol.appendChild(track);
  });
+}
+
+/* VIEW 2: 15-MINUTE INTERVAL GRID PLOTTER */
+function render15mGridView(agents, date){
+ const container=document.getElementById("grid15mContainer");
+ container.innerHTML="";
+
+ const head=document.createElement("div");head.className="agent-head-cell";
+ head.innerHTML="<b>Agent Info</b><br><small>15-Min Plotter</small>";container.appendChild(head);
+ for(let i=0;i<96;i++){
+  const h=document.createElement("div");h.className="time-head-15m";h.textContent=timeLabel15m(i);container.appendChild(h);
+ }
+
+ agents.forEach(agent=>{
+  const ac=document.createElement("div");ac.className="agent-row-label";
+  ac.innerHTML=`<div class="agent-info"><div class="agent-name">${esc(agent.name)}</div>
+   <div class="agent-meta">${esc(agent.agency)} • ${esc(agent.queue)}</div></div>
+   ${currentUser.role==="admin"?`
+   <div style="display:flex;gap:4px">
+     <button class="secondary" style="padding:4px 8px;font-size:10px;font-weight:bold" onclick="copySchedule('${agent.id}')">Copy</button>
+     <button class="primary" style="padding:4px 8px;font-size:10px;font-weight:bold" onclick="pasteSchedule('${agent.id}')">Paste</button>
+   </div>`:""}`;
+  container.appendChild(ac);
+
+  const day=get15mGridSchedule(agent.id, date);
+  for(let i=0;i<96;i++){
+   const c=document.createElement("div"); const key=day[i];
+   c.className="aux-cell-15m "+(key||"empty");
+   c.textContent=key?(auxByKey(key)?.short||""):"";
+   c.title=`${timeLabel15m(i)} - ${auxByKey(key)?.label||"Unplotted"}`;
+   
+   if(currentUser.role==="admin"){
+    c.onmousedown=()=>{set15mSlot(agent.id, date, i, selectedAux)};
+    c.onmouseenter=()=>{if(isMouseDown)set15mSlot(agent.id, date, i, selectedAux)};
+    c.oncontextmenu=(e)=>{e.preventDefault(); set15mSlot(agent.id, date, i, "")};
+   }
+   container.appendChild(c);
+  }
+ });
+}
+
+function set15mSlot(agentId, date, i, auxKey){
+ const day=get15mGridSchedule(agentId, date);
+ day[i]=day[i]===auxKey ? "" : auxKey;
+ grid15mSchedules[dayKey(date, agentId)]=day;
+ saveAll();
+ renderPlot();
 }
 
 function deleteAuxBlock(event, agentId, date, blockIdx){
@@ -793,9 +888,13 @@ function timeLabel(min){
 /* COPY / PASTE SCHEDULE FUNCTIONS */
 function copySchedule(agentId){
  const date=selectedDate;
- copiedScheduleBuffer=[...getAgentBlocks(agentId, date)];
+ if(activePlotMode==="timeline"){
+   copiedScheduleBuffer={mode:"timeline", data:[...getAgentBlocks(agentId, date)]};
+ } else {
+   copiedScheduleBuffer={mode:"grid15m", data:[...get15mGridSchedule(agentId, date)]};
+ }
  document.getElementById("copiedNotice").textContent=`Copied (${users.find(u=>u.id===agentId)?.name})`;
- alert(`Copied 24-hour schedule from ${users.find(u=>u.id===agentId)?.name}`);
+ alert(`Copied schedule from ${users.find(u=>u.id===agentId)?.name}`);
 }
 
 function pasteSchedule(targetAgentId){
@@ -803,7 +902,11 @@ function pasteSchedule(targetAgentId){
    return alert("No schedule copied! Click 'Copy' on an agent row first.");
  }
  const date=selectedDate;
- continuousSchedules[dayKey(date, targetAgentId)]=JSON.parse(JSON.stringify(copiedScheduleBuffer));
+ if(activePlotMode==="timeline"){
+   continuousSchedules[dayKey(date, targetAgentId)]=JSON.parse(JSON.stringify(copiedScheduleBuffer.data));
+ } else {
+   grid15mSchedules[dayKey(date, targetAgentId)]=[...copiedScheduleBuffer.data];
+ }
  saveAll();
  renderPlot();
  alert(`Pasted schedule to ${users.find(u=>u.id===targetAgentId)?.name}`);
@@ -815,6 +918,7 @@ function clearSelectedAgent(){
  const agent=users.find(u=>u.username===name);
  if(!agent)return alert("Agent not found.");
  continuousSchedules[dayKey(selectedDate,agent.id)]=[];
+ grid15mSchedules[dayKey(selectedDate,agent.id)]=Array(96).fill("");
  saveAll();renderPlot();
 }
 function saveSchedules(){saveAll();alert("Schedules saved in browser.");}
