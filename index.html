@@ -80,8 +80,10 @@ border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,0.15);padding:10px;z-index:
 .timeline-grid-overlay{position:absolute;top:0;bottom:0;left:0;right:0;display:flex;pointer-events:none}
 .grid-hour{width:60px;border-right:1px dashed #e2e8f0;height:100%}
 
-.aux-block{position:absolute;top:6px;bottom:6px;border-radius:6px;padding:2px 6px;font-size:10px;font-weight:800;color:#fff;display:flex;align-items:center;justify-content:space-between;box-shadow:0 2px 4px #0002;cursor:pointer;overflow:hidden;white-space:nowrap}
-.aux-block .delete-btn{font-size:11px;font-weight:900;margin-left:4px;cursor:pointer;background:rgba(0,0,0,0.25);border-radius:50%;width:14px;height:14px;display:inline-flex;align-items:center;justify-content:center}
+/* Draggable & Resizable AUX Block Styling */
+.aux-block{position:absolute;top:6px;bottom:6px;border-radius:6px;padding:2px 6px;font-size:10px;font-weight:800;color:#fff;display:flex;align-items:center;justify-content:space-between;box-shadow:0 2px 5px rgba(0,0,0,0.25);cursor:grab;overflow:hidden;white-space:nowrap;transition:box-shadow 0.2s}
+.aux-block:active{cursor:grabbing;box-shadow:0 4px 10px rgba(0,0,0,0.35);z-index:30}
+.aux-block .delete-btn{font-size:11px;font-weight:900;margin-left:6px;cursor:pointer;background:rgba(0,0,0,0.3);border-radius:50%;width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;transition:background 0.2s}
 .aux-block .delete-btn:hover{background:rgba(220,38,38,0.9)}
 
 /* MODE 2: 15-Minute Grid Interval Plotter */
@@ -272,9 +274,9 @@ border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,0.15);padding:10px;z-index:
     <div class="card">
       <b>Interactive Schedule Plotter Tools:</b>
       <div id="modeInstructionText" style="font-size:12px;color:#667085;margin-top:4px">
-        • <b>24-Hour Timeline:</b> Double-click to set exact start/end time, or click <b>✕</b> on any block to delete.<br>
-        • <b>15-Min Grid Plotter:</b> Click or drag across 15-minute intervals to plot AUX codes directly.<br>
-        • <b>Copy / Paste:</b> Click <b>Copy</b> on an agent row, then click <b>Paste</b> on target agents.
+        • <b>Drag AUX Blocks:</b> Click & drag any plotted AUX block horizontally across the 24-hour timeline to reposition it.<br>
+        • <b>Delete AUX Block:</b> Click the <b>✕</b> icon or right-click on any AUX block to delete it instantly.<br>
+        • <b>Double-Click on Track:</b> Opens exact time selection modal. Click <b>Copy</b> / <b>Paste</b> to replicate schedules.
       </div>
       <div class="legend" id="legend" style="margin-top:10px"></div>
     </div>
@@ -363,7 +365,7 @@ border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,0.15);padding:10px;z-index:
 
 <script>
 /* ==========================================================
-   WFM SCHEDULE PLOTTER - DUAL MODE (24H CONTINUOUS & 15-MIN GRID)
+   WFM SCHEDULE PLOTTER - FULL AUX DRAG & DELETE ENGINE
    ========================================================== */
 
 const AUX = [
@@ -399,7 +401,7 @@ let currentUser = null;
 let selectedAux = "available";
 let selectedDate = today();
 let timerInterval = null;
-let activePlotMode = "timeline"; // 'timeline' or 'grid15m'
+let activePlotMode = "timeline";
 let isMouseDown = false;
 
 // Copy / Paste Buffer
@@ -752,7 +754,7 @@ function renderPlot(){
  }
 }
 
-/* VIEW 1: CONTINUOUS 24H TIMELINE */
+/* VIEW 1: CONTINUOUS 24H TIMELINE WITH AUX BLOCK DRAGGING & DELETION */
 function renderTimelineHeader(){
  const hdr=document.getElementById("timelineHeader");
  hdr.innerHTML="";
@@ -805,6 +807,14 @@ function renderContinuousTimelineView(agents, date){
       ${currentUser.role==="admin"?`<span class="delete-btn" title="Delete AUX Block" onclick="deleteAuxBlock(event, '${agent.id}', '${date}', ${idx})">✕</span>`:""}`;
      
      if(currentUser.role==="admin"){
+       // DRAG REPOSITION AUX BLOCK ACROSS TIMELINE TRACK
+       blockEl.onmousedown=(e)=>{
+         if(e.target.classList.contains("delete-btn")) return;
+         e.stopPropagation();
+         initDragMoveBlock(e, agent.id, date, idx, track);
+       };
+
+       // Right-click to delete AUX block
        blockEl.oncontextmenu=(e)=>{
          e.preventDefault();
          deleteAuxBlock(e, agent.id, date, idx);
@@ -823,6 +833,33 @@ function renderContinuousTimelineView(agents, date){
    }
    tracksCol.appendChild(track);
  });
+}
+
+/* DRAG HORIZONTALLY TO REPOSITION AUX BLOCK */
+function initDragMoveBlock(e, agentId, date, blockIdx, track){
+ const blocks=getAgentBlocks(agentId, date);
+ const target=blocks[blockIdx];
+ const duration = target.endMin - target.startMin;
+ const trackRect = track.getBoundingClientRect();
+ const startMouseX = e.clientX;
+ const origStartMin = target.startMin;
+
+ function onMouseMove(me){
+   const deltaX = Math.floor(me.clientX - startMouseX);
+   let newStart = Math.max(0, Math.min(1440 - duration, origStartMin + deltaX));
+   target.startMin = newStart;
+   target.endMin = newStart + duration;
+   renderPlot();
+ }
+
+ function onMouseUp(){
+   document.removeEventListener("mousemove", onMouseMove);
+   document.removeEventListener("mouseup", onMouseUp);
+   saveAll();
+ }
+
+ document.addEventListener("mousemove", onMouseMove);
+ document.addEventListener("mouseup", onMouseUp);
 }
 
 /* VIEW 2: 15-MINUTE INTERVAL GRID PLOTTER */
@@ -872,6 +909,7 @@ function set15mSlot(agentId, date, i, auxKey){
  renderPlot();
 }
 
+/* DELETE AUX BLOCK FUNCTION */
 function deleteAuxBlock(event, agentId, date, blockIdx){
  event.stopPropagation();
  const blocks=getAgentBlocks(agentId, date);
