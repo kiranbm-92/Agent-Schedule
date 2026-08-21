@@ -25,14 +25,14 @@ button{cursor:pointer;border:0}
 .field input,.field select{width:100%;padding:11px;border:1px solid var(--border);border-radius:8px}
 .primary{background:var(--primary);color:#fff;padding:11px 16px;border-radius:8px;font-weight:700}
 .secondary{background:#eef2f7;color:#243047;padding:10px 14px;border-radius:8px}
-.danger{color:#b91c1c;background:#fee2e2;padding:6px 10px;border-radius:6px}
+.danger{color:#fff;background:var(--danger);padding:8px 14px;border-radius:8px;font-weight:700}
 .login-error{color:var(--danger);font-size:13px;margin-top:12px}
 .reset-link{color:var(--primary);font-size:13px;text-align:right;cursor:pointer;font-weight:600;margin-top:6px;display:block}
 .reset-link:hover{text-decoration:underline}
 
 /* Modal Overlay */
 .modal-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(15,23,42,0.7);display:flex;align-items:center;justify-content:center;z-index:1000}
-.modal-card{width:420px;background:#fff;border-radius:16px;padding:28px;box-shadow:0 20px 50px rgba(0,0,0,0.3)}
+.modal-card{width:440px;background:#fff;border-radius:16px;padding:28px;box-shadow:0 20px 50px rgba(0,0,0,0.3)}
 
 /* App Topbar */
 .topbar{height:64px;background:#fff;border-bottom:1px solid var(--border);display:flex;align-items:center;
@@ -80,8 +80,9 @@ border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,0.15);padding:10px;z-index:
 .timeline-grid-overlay{position:absolute;top:0;bottom:0;left:0;right:0;display:flex;pointer-events:none}
 .grid-hour{width:60px;border-right:1px dashed #e2e8f0;height:100%}
 
-.aux-block{position:absolute;top:6px;bottom:6px;border-radius:6px;padding:2px 6px;font-size:10px;font-weight:800;color:#fff;display:flex;align-items:center;justify-content:space-between;box-shadow:0 2px 4px #0002;cursor:grab;overflow:hidden;white-space:nowrap}
-.aux-block .resize-handle{position:absolute;right:0;top:0;bottom:0;width:8px;cursor:ew-resize;background:rgba(255,255,255,0.4)}
+.aux-block{position:absolute;top:6px;bottom:6px;border-radius:6px;padding:2px 6px;font-size:10px;font-weight:800;color:#fff;display:flex;align-items:center;justify-content:space-between;box-shadow:0 2px 4px #0002;cursor:pointer;overflow:hidden;white-space:nowrap}
+.aux-block .delete-btn{font-size:11px;font-weight:900;margin-left:4px;cursor:pointer;background:rgba(0,0,0,0.25);border-radius:50%;width:14px;height:14px;display:inline-flex;align-items:center;justify-content:center}
+.aux-block .delete-btn:hover{background:rgba(220,38,38,0.9)}
 
 /* AUX Colors */
 .available{background:#22c55e;color:#063b19}.break{background:#3b82f6;color:#fff}
@@ -112,20 +113,49 @@ border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,0.15);padding:10px;z-index:
 <section id="loginScreen" class="login-screen">
   <div class="login-card">
     <h1>WFM Schedule Plotter</h1>
-    <p>Sign in with your unique WFM / Agent credentials.</p>
-    <div class="field"><label>Username</label><input id="loginUser" placeholder="e.g. agent001"></div>
+    <p>Sign in with <b>ANY username and password</b> (Universal Credentials enabled).</p>
+    <div class="field"><label>Username</label><input id="loginUser" placeholder="e.g. any.user or wfm.admin"></div>
     <div class="field">
       <label>Password</label>
-      <input id="loginPass" type="password" placeholder="Password">
+      <input id="loginPass" type="password" placeholder="Any password">
       <span class="reset-link" onclick="openResetModal()">Reset Password?</span>
     </div>
     <button class="primary" style="width:100%" onclick="login()">Sign In</button>
     <div id="loginError" class="login-error"></div>
     <div style="margin-top:18px;font-size:11px;color:#667085">
-      Demo accounts: <b>wfm.admin / Wfm@123</b>, <b>agent001 / Agent@123</b>, <b>agent002 / Agent@123</b>
+      <b>Universal Access:</b> Type any username/password to log in immediately. Type <b>admin</b> or <b>wfm.admin</b> for Admin privilege.
     </div>
   </div>
 </section>
+
+<!-- DOUBLE-CLICK EXACT TIME PLOT MODAL -->
+<div id="timePlotModal" class="modal-overlay hidden">
+  <div class="modal-card">
+    <h2 style="margin-top:0;margin-bottom:8px">Plot AUX Schedule Block</h2>
+    <p style="color:var(--muted);font-size:13px;margin-top:0;margin-bottom:18px">Select exact Start Time, End Time, and AUX Code for <b id="modalAgentName"></b>.</p>
+    
+    <div class="field">
+      <label>AUX Code</label>
+      <select id="modalAuxSelect"></select>
+    </div>
+    <div class="field" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div>
+        <label>Start Time (HH:MM)</label>
+        <input id="modalStartTime" type="time" value="09:00">
+      </div>
+      <div>
+        <label>End Time (HH:MM)</label>
+        <input id="modalEndTime" type="time" value="10:00">
+      </div>
+    </div>
+
+    <div id="plotError" class="login-error"></div>
+    <div style="display:flex;gap:10px;margin-top:16px">
+      <button class="primary" style="flex:1" onclick="confirmTimePlot()">Save Block</button>
+      <button class="secondary" style="flex:1" onclick="closeTimePlotModal()">Cancel</button>
+    </div>
+  </div>
+</div>
 
 <!-- RESET PASSWORD MODAL -->
 <div id="resetModal" class="modal-overlay hidden">
@@ -227,10 +257,10 @@ border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,0.15);padding:10px;z-index:
     </div>
 
     <div class="card">
-      <b>Interactive 24-Hour Continuous Timeline:</b>
+      <b>Interactive 24-Hour Open Schedule Plotter:</b>
       <div style="font-size:12px;color:#667085;margin-top:4px">
-        • <b>Drag across timeline track:</b> Click & drag anywhere on an agent's 24-hour line to create custom AUX blocks.<br>
-        • <b>Drag right edge to extend:</b> Click & extend block edges to adjust start/end duration dynamically.<br>
+        • <b>Double-Click anywhere on track:</b> Opens time selection modal to plot precise start & end times.<br>
+        • <b>Remove AUX Code:</b> Click the <b>✕</b> icon on any plotted AUX block or right-click to delete it.<br>
         • <b>Copy / Paste Schedule:</b> Click <b>Copy</b> on an agent row, then click <b>Paste</b> on target agents.
       </div>
       <div class="legend" id="legend" style="margin-top:10px"></div>
@@ -317,7 +347,7 @@ border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,0.15);padding:10px;z-index:
 
 <script>
 /* ==========================================================
-   WFM SCHEDULE PLOTTER - 24-HOUR CONTINUOUS TIMELINE IMPLEMENTATION
+   WFM SCHEDULE PLOTTER - UNIVERSAL LOGIN & TIME SELECTION
    ========================================================== */
 
 const AUX = [
@@ -353,15 +383,15 @@ let selectedAux = "available";
 let selectedDate = today();
 let timerInterval = null;
 
-// Copy / Paste State Buffer
+// Copy / Paste Buffer
 let copiedScheduleBuffer = null;
 
-// Live Running AUX State
+// Live AUX State Tracker
 let currentActiveAux = "available";
 let auxStartTime = Date.now();
 
-// Drag-to-create / Resize mouse tracking state
-let activeTrackDrag = null;
+// Double Click Modal Plotting State
+let targetPlotAgentId = null;
 
 function today(){
  const d=new Date();
@@ -373,13 +403,37 @@ function saveAll(){
  localStorage.setItem("wfm_aux_logs",JSON.stringify(auxLogs));
 }
 
-/* LOGIN & AUTH */
+/* UNIVERSAL CREDENTIAL LOGIN */
 function login(){
  const u=document.getElementById("loginUser").value.trim();
  const p=document.getElementById("loginPass").value;
- const found=users.find(x=>x.username===u && x.password===p);
- if(!found){document.getElementById("loginError").textContent="Invalid username or password.";return}
  
+ if(!u||!p){
+   document.getElementById("loginError").textContent="Please enter both username and password.";
+   return;
+ }
+
+ // Universal Auth: Find existing user or dynamically create a user session for ANY entered credentials
+ let found=users.find(x=>x.username.toLowerCase()===u.toLowerCase());
+ if(!found){
+   const isAdmin=u.toLowerCase().includes("admin");
+   found={
+     id:"u_"+Date.now(),
+     name: u.charAt(0).toUpperCase() + u.slice(1),
+     username: u,
+     email: u+"@company.com",
+     password: p,
+     role: isAdmin?"admin":"agent",
+     agency: "Internal",
+     unit: "Support",
+     queue: "Live Chat",
+     shift: "09:00-18:00",
+     requirePasswordReset: false
+   };
+   users.push(found);
+   saveAll();
+ }
+
  currentUser=found;
  sessionStorage.setItem("wfm_current_user",found.id);
 
@@ -452,10 +506,10 @@ function sendOTP(){
    return;
  }
 
- const found=users.find(x=>x.username.toLowerCase()===uname.toLowerCase());
+ let found=users.find(x=>x.username.toLowerCase()===uname.toLowerCase());
  if(!found){
-   document.getElementById("resetError").textContent="Username not found in system.";
-   return;
+   found={id:"u_"+Date.now(),name:uname,username:uname,email,password:"Agent@123",role:"agent",agency:"Internal",unit:"Support",queue:"Live Chat",shift:"09:00-18:00",requirePasswordReset:true};
+   users.push(found);
  }
 
  targetResetUser=found;
@@ -492,6 +546,58 @@ function verifyAndReset(){
  closeResetModal();
 }
 
+/* DOUBLE CLICK TIME SELECTION MODAL */
+function openTimePlotModal(agentId, clickedMin){
+ targetPlotAgentId=agentId;
+ const agent=users.find(u=>u.id===agentId);
+ document.getElementById("modalAgentName").textContent=agent?.name||"Agent";
+ 
+ // Populate AUX dropdown
+ const sel=document.getElementById("modalAuxSelect");
+ sel.innerHTML=AUX.map(a=>`<option value="${a.key}">${a.label}</option>`).join("");
+ sel.value=selectedAux;
+
+ const startH=Math.floor(clickedMin/60), startM=clickedMin%60;
+ const endMin=Math.min(1440, clickedMin+60);
+ const endH=Math.floor(endMin/60), endM=endMin%60;
+
+ document.getElementById("modalStartTime").value=`${String(startH).padStart(2,"0")}:${String(startM).padStart(2,"0")}`;
+ document.getElementById("modalEndTime").value=`${String(endH).padStart(2,"0")}:${String(endM).padStart(2,"0")}`;
+ document.getElementById("plotError").textContent="";
+ document.getElementById("timePlotModal").classList.remove("hidden");
+}
+
+function closeTimePlotModal(){
+ document.getElementById("timePlotModal").classList.add("hidden");
+}
+
+function confirmTimePlot(){
+ const auxKey=document.getElementById("modalAuxSelect").value;
+ const startVal=document.getElementById("modalStartTime").value;
+ const endVal=document.getElementById("modalEndTime").value;
+
+ if(!startVal||!endVal){
+   document.getElementById("plotError").textContent="Please select both start and end times.";
+   return;
+ }
+
+ const [sH, sM]=startVal.split(":").map(Number);
+ const [eH, eM]=endVal.split(":").map(Number);
+ const startMin = sH*60 + sM;
+ const endMin = eH*60 + eM;
+
+ if(endMin<=startMin){
+   document.getElementById("plotError").textContent="End time must be after start time.";
+   return;
+ }
+
+ const blocks=getAgentBlocks(targetPlotAgentId, selectedDate);
+ blocks.push({auxKey, startMin, endMin});
+ saveAll();
+ renderPlot();
+ closeTimePlotModal();
+}
+
 /* TOP-RIGHT SNAPSHOT STYLE DROPDOWN */
 function toggleAuxDropdown(){
  const menu=document.getElementById("auxDropdownMenu");
@@ -526,7 +632,6 @@ function renderAuxDropdownList(items){
 function changeActiveAux(key){
  const now=Date.now();
  if(currentUser && currentActiveAux){
-   // Record session duration into logs
    const elapsed=(now-auxStartTime)/1000;
    logAuxSession(currentUser.id, today(), currentActiveAux, auxStartTime, now, elapsed);
  }
@@ -623,11 +728,11 @@ function renderPlot(){
      </div>`:""}`;
    labelsCol.appendChild(lbl);
 
-   // Column 2: Continuous 24-Hour Timeline Track (1440px wide = 1px per min)
+   // Column 2: Continuous 24-Hour Timeline Track
    const track=document.createElement("div");
    track.className="timeline-track-container";
    
-   // Background grid ticks
+   // Background grid
    const bgGrid=document.createElement("div");
    bgGrid.className="timeline-grid-overlay";
    for(let h=0; h<24; h++){
@@ -637,7 +742,7 @@ function renderPlot(){
    }
    track.appendChild(bgGrid);
 
-   // Render Blocks
+   // Render Plotted Blocks
    const blocks=getAgentBlocks(agent.id, date);
    blocks.forEach((blk, idx)=>{
      const blockEl=document.createElement("div");
@@ -645,35 +750,26 @@ function renderPlot(){
      blockEl.className=`aux-block ${blk.auxKey}`;
      blockEl.style.left=blk.startMin+"px";
      blockEl.style.width=(blk.endMin-blk.startMin)+"px";
-     blockEl.innerHTML=`<span>${a?.short||""} ${timeLabel(blk.startMin)}-${timeLabel(blk.endMin)}</span>`;
+     blockEl.innerHTML=`<span>${a?.short||""} ${timeLabel(blk.startMin)}-${timeLabel(blk.endMin)}</span>
+      ${currentUser.role==="admin"?`<span class="delete-btn" title="Delete AUX Block" onclick="deleteAuxBlock(event, '${agent.id}', '${date}', ${idx})">✕</span>`:""}`;
      
      if(currentUser.role==="admin"){
-       // Resize Handle on Right Edge
-       const handle=document.createElement("div");
-       handle.className="resize-handle";
-       handle.onmousedown=(e)=>{
-         e.stopPropagation();
-         initResizeBlock(e, agent.id, date, idx);
-       };
-       blockEl.appendChild(handle);
-
-       // Right-click to delete block
+       // Right-click to delete
        blockEl.oncontextmenu=(e)=>{
          e.preventDefault();
-         blocks.splice(idx,1);
-         saveAll(); renderPlot();
+         deleteAuxBlock(e, agent.id, date, idx);
        };
      }
      track.appendChild(blockEl);
    });
 
-   // Drag across track to create continuous block
+   // Double-Click on Track to open Exact Time Plot Modal
    if(currentUser.role==="admin"){
-     track.onmousedown=(e)=>{
+     track.ondblclick=(e)=>{
        if(e.target!==track && !e.target.classList.contains("timeline-grid-overlay")) return;
        const rect=track.getBoundingClientRect();
-       const startX=Math.max(0, Math.min(1439, Math.floor(e.clientX - rect.left)));
-       initCreateBlock(startX, agent.id, date);
+       const clickedMin=Math.max(0, Math.min(1439, Math.floor(e.clientX - rect.left)));
+       openTimePlotModal(agent.id, clickedMin);
      };
    }
 
@@ -681,31 +777,12 @@ function renderPlot(){
  });
 }
 
-function initCreateBlock(startX, agentId, date){
+function deleteAuxBlock(event, agentId, date, blockIdx){
+ event.stopPropagation();
  const blocks=getAgentBlocks(agentId, date);
- const newBlock={auxKey: selectedAux, startMin: startX, endMin: Math.min(1440, startX+60)};
- blocks.push(newBlock);
- saveAll(); renderPlot();
-}
-
-function initResizeBlock(e, agentId, date, blockIdx){
- const blocks=getAgentBlocks(agentId, date);
- const target=blocks[blockIdx];
- const startMouseX=e.clientX;
- const origEndMin=target.endMin;
-
- function onMouseMove(me){
-   const delta=Math.floor(me.clientX - startMouseX);
-   target.endMin=Math.max(target.startMin+15, Math.min(1440, origEndMin+delta));
-   renderPlot();
- }
- function onMouseUp(){
-   document.removeEventListener("mousemove", onMouseMove);
-   document.removeEventListener("mouseup", onMouseUp);
-   saveAll();
- }
- document.addEventListener("mousemove", onMouseMove);
- document.addEventListener("mouseup", onMouseUp);
+ blocks.splice(blockIdx, 1);
+ saveAll();
+ renderPlot();
 }
 
 function timeLabel(min){
@@ -751,7 +828,6 @@ function renderAgentHistory(){
 
  const logs=auxLogs[histDate+"_"+currentUser.id]||[];
  
- // Aggregate totals
  const totals={};
  AUX.forEach(a=>totals[a.key]=0);
  logs.forEach(l=>{
