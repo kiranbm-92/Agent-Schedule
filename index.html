@@ -128,17 +128,18 @@ border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,0.15);padding:10px;z-index:
 <section id="loginScreen" class="login-screen">
   <div class="login-card">
     <h1>WFM Schedule Plotter</h1>
-    <p>Sign in with <b>ANY username and password</b> (Universal Credentials enabled).</p>
+    <p>Sign in with your assigned account credentials.</p>
     <div class="field"><label>Username</label><input id="loginUser" placeholder="e.g. agent001 or wfm.admin"></div>
     <div class="field">
       <label>Password</label>
-      <input id="loginPass" type="password" placeholder="Any password">
+      <input id="loginPass" type="password" placeholder="Enter password">
       <span class="reset-link" onclick="openResetModal()">Reset Password?</span>
     </div>
     <button class="primary" style="width:100%" onclick="login()">Sign In</button>
     <div id="loginError" class="login-error"></div>
     <div style="margin-top:18px;font-size:11px;color:#667085">
-      <b>Universal Access:</b> Type any username/password to log in. Include <b>admin</b> or <b>wfm.admin</b> for Admin privileges.
+      Default Admin: <b>wfm.admin / Wfm@123</b><br>
+      Default Agents: <b>agent001 / Agent@123</b>, <b>agent002 / Agent@123</b>
     </div>
   </div>
 </section>
@@ -176,7 +177,7 @@ border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,0.15);padding:10px;z-index:
 <div id="resetModal" class="modal-overlay hidden">
   <div class="modal-card">
     <h2 style="margin-top:0;margin-bottom:8px">Reset Password</h2>
-    <p style="color:var(--muted);font-size:13px;margin-top:0;margin-bottom:18px">Enter any active email address to receive your 6-digit verification OTP.</p>
+    <p style="color:var(--muted);font-size:13px;margin-top:0;margin-bottom:18px">Enter your active email address to receive a 6-digit verification OTP.</p>
     
     <div id="otpStep1">
       <div class="field">
@@ -302,7 +303,7 @@ border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,0.15);padding:10px;z-index:
       <div class="plot-grid">
         <div>
           <div class="agent-head-cell">
-            <span id="agentHeadLabel">Agent Info / Schedule Dates</span>
+            <span id="agentHeadLabel">Agent Info / All Uploaded Schedule Dates</span>
             <small id="copiedNotice" style="color:#2563eb;font-weight:bold"></small>
           </div>
           <div id="agentRowsContainer"></div>
@@ -480,7 +481,7 @@ function normalizeDateStr(dateStr) {
   return dateStr;
 }
 
-/* UNIVERSAL CREDENTIAL LOGIN */
+/* STRICT PASSWORD LOGIN IMPLEMENTATION */
 function login(){
  const u=document.getElementById("loginUser").value.trim();
  const p=document.getElementById("loginPass").value;
@@ -490,24 +491,11 @@ function login(){
    return;
  }
 
- let found=users.find(x=>x.username.toLowerCase()===u.toLowerCase());
+ // Validate against stored user credentials strictly
+ let found=users.find(x=>x.username.toLowerCase()===u.toLowerCase() && x.password===p);
  if(!found){
-   const isAdmin=u.toLowerCase().includes("admin");
-   found={
-     id:"u_"+Date.now(),
-     name: u.charAt(0).toUpperCase() + u.slice(1),
-     username: u,
-     email: u+"@company.com",
-     password: p,
-     role: isAdmin?"admin":"agent",
-     agency: "Internal",
-     unit: "Support",
-     queue: "Live Chat",
-     shift: "09:00-18:00",
-     requirePasswordReset: false
-   };
-   users.push(found);
-   saveAll();
+   document.getElementById("loginError").textContent="Invalid username or password.";
+   return;
  }
 
  currentUser=found;
@@ -584,8 +572,8 @@ function sendOTP(){
 
  let found=users.find(x=>x.username.toLowerCase()===uname.toLowerCase());
  if(!found){
-   found={id:"u_"+Date.now(),name:uname,username:uname,email,password:"Agent@123",role:"agent",agency:"Internal",unit:"Support",queue:"Live Chat",shift:"09:00-18:00",requirePasswordReset:true};
-   users.push(found);
+   document.getElementById("resetError").textContent="Username not found. Please contact Administrator.";
+   return;
  }
 
  targetResetUser=found;
@@ -786,25 +774,25 @@ function timeLabel15m(i){
  return String(h).padStart(2,"0")+":"+String(m).padStart(2,"0");
 }
 
-/* HELPER TO GET ALL DATES HAS SCHEDULES FOR AN AGENT */
+/* COMPREHENSIVE HELPER TO GET ALL DATES HAVING SCHEDULES FOR AN AGENT ACROSS LOCALSTORAGE */
 function getAgentScheduleDates(agentId){
  const datesSet = new Set();
- // Continuous schedules
+ // Scan Continuous Schedules
  Object.keys(continuousSchedules).forEach(key=>{
-   const [d, uId] = key.split("_");
-   if(uId === agentId && continuousSchedules[key].length > 0){
+   if(key.endsWith("_" + agentId) && continuousSchedules[key] && continuousSchedules[key].length > 0){
+     const d = key.substring(0, key.length - agentId.length - 1);
      datesSet.add(d);
    }
  });
- // 15m Grid schedules
+ // Scan 15m Grid Schedules
  Object.keys(grid15mSchedules).forEach(key=>{
-   const [d, uId] = key.split("_");
-   if(uId === agentId && grid15mSchedules[key].some(x=>x!=="")){
+   if(key.endsWith("_" + agentId) && grid15mSchedules[key] && grid15mSchedules[key].some(x=>x!=="")){
+     const d = key.substring(0, key.length - agentId.length - 1);
      datesSet.add(d);
    }
  });
  const arr = Array.from(datesSet).sort();
- return arr.length > 0 ? arr : [selectedDate];
+ return arr.length > 0 ? arr : [today()];
 }
 
 /* RENDER PLOTTER (DUAL MODE WITH ALL-DAYS AGENT VIEW) */
@@ -1136,7 +1124,12 @@ function saveSchedules(){saveAll();alert("Schedules saved in browser.");}
 
 /* DOWNLOAD SAMPLE CSV TEMPLATE FOR ADMINS */
 function downloadSampleTemplate(){
- const sampleContent = "Date,Username,AUX_Code,Start_Time,End Time\n9/1/26,external-syed.pasha@coindcx.com,Available,07:00,16:00\n9/1/26,external-pritam.kumar@coindcx.com,Available,15:00,00:00\n9/1/26,external-bibekananda.bariki@coindcx.com,Week Off,07:00,16:00\n9/1/26,external-nawaz.p@coindcx.com,Planned Leave,15:00,00:00\n9/1/26,external-mohammed.roshan@coindcx.com,Comp Off,23:00,08:00";
+ const sampleContent = "Date,Username,AUX_Code,Start_Time,End Time
+9/1/26,external-syed.pasha@coindcx.com,Available,07:00,16:00
+9/1/26,external-pritam.kumar@coindcx.com,Available,15:00,00:00
+9/1/26,external-bibekananda.bariki@coindcx.com,Week Off,07:00,16:00
+9/1/26,external-nawaz.p@coindcx.com,Planned Leave,15:00,00:00
+9/1/26,external-mohammed.roshan@coindcx.com,Comp Off,23:00,08:00";
  const blob = new Blob([sampleContent], {type: "text/csv;charset=utf-8"});
  const url = URL.createObjectURL(blob);
  const a = document.createElement("a");
@@ -1154,7 +1147,9 @@ function handleExcelImport(event){
  const reader=new FileReader();
  reader.onload=function(e){
    const text=e.target.result;
-   const lines=text.split(/\r?\n/);
+   const lines=text.split(/
+?
+/);
    let count=0;
    
    lines.forEach((line, idx)=>{
@@ -1167,7 +1162,7 @@ function handleExcelImport(event){
        // Normalize Date to YYYY-MM-DD
        const normDate = normalizeDateStr(rawDate);
 
-       // Auto-find or create user profile
+       // Auto-find or create user profile with unique default password
        let agent = users.find(u=>u.username.toLowerCase()===username.toLowerCase() || (u.email && u.email.toLowerCase()===username.toLowerCase()));
        if(!agent){
          const cleanName = username.split("@")[0].replace("external-","").replace("."," ").replace(/\w/g, l => l.toUpperCase());
@@ -1176,7 +1171,7 @@ function handleExcelImport(event){
            name: cleanName,
            username: username,
            email: username.includes("@")?username:username+"@coindcx.com",
-           password: "Agent@123",
+           password: "Agent@123", // Admin created default unique password
            role: "agent",
            agency: "External",
            unit: "Support",
@@ -1292,7 +1287,21 @@ function renderAdmin(){
  document.getElementById("adminBody").innerHTML=users.map(u=>`<tr>
  <td>${esc(u.name)}</td><td>${esc(u.username)}</td><td>${esc(u.email||"-")}</td><td>${esc(u.agency)}</td><td>${esc(u.unit)}</td>
  <td>${esc(u.queue)}</td><td>${esc(u.shift)}</td><td>${esc(u.role)}</td>
- <td>${u.role==="agent"?`<button class="danger" onclick="deleteAgent('${u.id}')">Delete</button>`:""}</td></tr>`).join("");
+ <td>${u.role==="agent"?`<button class="danger" onclick="deleteAgent('${u.id}')">Delete</button> <button class="action" onclick="editPassword('${u.id}')">Set Password</button>`:""}</td></tr>`).join("");
+}
+
+function editPassword(id){
+ const user=users.find(u=>u.id===id);
+ if(!user) return;
+ const newPass=prompt(`Enter unique password for agent '${user.name}' (${user.username}):`, user.password||"Agent@123");
+ if(newPass && newPass.length>=6){
+   user.password=newPass;
+   saveAll();
+   renderAdmin();
+   alert(`Password for '${user.name}' updated successfully to '${newPass}'!`);
+ } else if(newPass) {
+   alert("Password must be at least 6 characters long.");
+ }
 }
 
 function addAgent(){
@@ -1300,7 +1309,7 @@ function addAgent(){
  const username=prompt("Unique Username");if(!username)return;
  if(users.some(u=>u.username===username))return alert("Username exists.");
  const email=prompt("Agent Email Address", username+"@company.com");if(!email)return;
- const password=prompt("Temporary Password","Agent@123");if(!password)return;
+ const password=prompt("Unique Password for Agent","Agent@123");if(!password||password.length<6)return alert("Password must be at least 6 characters.");
  const agency=prompt("Agency","RM")||"RM",unit=prompt("Unit","Support")||"Support",
  queue=prompt("Queue","Live Chat")||"Live Chat",shift=prompt("Shift","09:00-18:00")||"09:00-18:00";
  users.push({id:"u"+Date.now(),name,username,email,password,role:"agent",agency,unit,queue,shift,requirePasswordReset:false});
@@ -1322,7 +1331,8 @@ function exportCSV(){
     lines.push([date,a.name,a.username,a.agency,a.unit,a.queue,aux?.label,l.startTime,l.endTime,l.durationSec].map(csv).join(","));
   });
  });
- const blob=new Blob([lines.join("\n")],{type:"text/csv;charset=utf-8"});
+ const blob=new Blob([lines.join("
+")],{type:"text/csv;charset=utf-8"});
  const url=URL.createObjectURL(blob),link=document.createElement("a");
  link.href=url;link.download=`WFM_AUX_History_${date}.csv`;link.click();URL.revokeObjectURL(url);
 }
