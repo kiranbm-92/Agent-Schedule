@@ -1124,12 +1124,7 @@ function saveSchedules(){saveAll();alert("Schedules saved in browser.");}
 
 /* DOWNLOAD SAMPLE CSV TEMPLATE FOR ADMINS */
 function downloadSampleTemplate(){
- const sampleContent = "Date,Username,AUX_Code,Start_Time,End Time
-9/1/26,external-syed.pasha@coindcx.com,Available,07:00,16:00
-9/1/26,external-pritam.kumar@coindcx.com,Available,15:00,00:00
-9/1/26,external-bibekananda.bariki@coindcx.com,Week Off,07:00,16:00
-9/1/26,external-nawaz.p@coindcx.com,Planned Leave,15:00,00:00
-9/1/26,external-mohammed.roshan@coindcx.com,Comp Off,23:00,08:00";
+ const sampleContent = "Date,Username,AUX_Code,Start_Time,End Time\n9/1/26,external-syed.pasha@coindcx.com,Available,07:00,16:00\n9/1/26,external-pritam.kumar@coindcx.com,Available,15:00,00:00\n9/1/26,external-bibekananda.bariki@coindcx.com,Week Off,07:00,16:00\n9/1/26,external-nawaz.p@coindcx.com,Planned Leave,15:00,00:00\n9/1/26,external-mohammed.roshan@coindcx.com,Comp Off,23:00,08:00";
  const blob = new Blob([sampleContent], {type: "text/csv;charset=utf-8"});
  const url = URL.createObjectURL(blob);
  const a = document.createElement("a");
@@ -1331,8 +1326,7 @@ function exportCSV(){
     lines.push([date,a.name,a.username,a.agency,a.unit,a.queue,aux?.label,l.startTime,l.endTime,l.durationSec].map(csv).join(","));
   });
  });
- const blob=new Blob([lines.join("
-")],{type:"text/csv;charset=utf-8"});
+ const blob=new Blob([lines.join("\n")],{type:"text/csv;charset=utf-8"});
  const url=URL.createObjectURL(blob),link=document.createElement("a");
  link.href=url;link.download=`WFM_AUX_History_${date}.csv`;link.click();URL.revokeObjectURL(url);
 }
