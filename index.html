@@ -859,7 +859,7 @@ function renderAgentAllDaysTimelineView(agent, dates){
    const lbl=document.createElement("div");
    lbl.className="agent-row-label";
    lbl.innerHTML=`<div class="agent-info"><div class="agent-name">📅 ${dateStr}</div>
-     <div class="agent-meta">${esc(agent.name)} • ${esc(agent.queue)}</div></div>`;
+     <div class="agent-meta">${esc(agent.name)} • ${esc(agent.shift || "Shift N/A")} • ${esc(agent.queue)}</div></div>`;
    labelsCol.appendChild(lbl);
 
    const track=document.createElement("div");
@@ -903,7 +903,7 @@ function renderAgentAllDays15mGridView(agent, dates){
  dates.forEach(dateStr=>{
   const ac=document.createElement("div");ac.className="agent-row-label";
   ac.innerHTML=`<div class="agent-info"><div class="agent-name">📅 ${dateStr}</div>
-   <div class="agent-meta">${esc(agent.name)} • ${esc(agent.queue)}</div></div>`;
+   <div class="agent-meta">${esc(agent.name)} • ${esc(agent.shift || "Shift N/A")} • ${esc(agent.queue)}</div></div>`;
   container.appendChild(ac);
 
   const day=get15mGridSchedule(agent.id, dateStr);
