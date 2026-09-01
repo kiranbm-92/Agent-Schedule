@@ -378,6 +378,7 @@ border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,0.15);padding:10px;z-index:
 
 <script>
 
+
 /* ==========================================================
    WFM SCHEDULE PLOTTER - FULL AUX DEFINITIONS & SEPARATION
    ========================================================== */
@@ -423,7 +424,7 @@ const defaultUsers = [
  {id:"u5",name:"Sneha Das",username:"agent004",email:"agent004@company.com",password:"Agent@123",role:"agent",agency:"FiveS",unit:"Support",queue:"Tickets",shift:"23:00-08:00",requirePasswordReset:false}
 ];
 
-localStorage.removeItem("wfm_users"); let users = defaultUsers;
+let users = JSON.parse(localStorage.getItem("wfm_users") || "null") || defaultUsers;
 let continuousSchedules = JSON.parse(localStorage.getItem("wfm_continuous_schedules") || "{}");
 let grid15mSchedules = JSON.parse(localStorage.getItem("wfm_grid15m_schedules") || "{}");
 let auxLogs = JSON.parse(localStorage.getItem("wfm_aux_logs") || "{}");
@@ -488,70 +489,41 @@ function login(){
    return;
  }
 
- // 1. ADMIN LOGIN CHECK
- if(u==="wfm@coindcx.com" || u==="wfm.admin"){
-   if(p==="Admin@007" || p==="Wfm@123"){
-     let adminUser = users.find(x=>x.role==="admin");
-     if(!adminUser){
-       adminUser = {id:"admin_1", name:"WFM Admin", username:"wfm@coindcx.com", email:"wfm@coindcx.com", password:p, role:"admin", agency:"Internal", unit:"WFM", queue:"All", shift:"09:00-18:00", requirePasswordReset:false};
-       users.push(adminUser);
-     }
-     currentUser = adminUser;
-     sessionStorage.setItem("wfm_current_user", currentUser.id);
-     initializeAppView();
-     return;
-   } else {
-     document.getElementById("loginError").textContent="Invalid Admin Password. Expected Admin@007.";
-     return;
-   }
- }
+ // Find user by username or email
+ let found = users.find(x => x.username.toLowerCase()===u || (x.email && x.email.toLowerCase()===u));
 
- // 2. AGENT LOGIN CHECK (Matches stored password OR universal CoinDCX@135 password for any agent email)
- if(p==="CoinDCX@135" || p==="Agent@123"){
-   let found = users.find(x=>x.username.toLowerCase()===u || (x.email && x.email.toLowerCase()===u));
-   if(!found){
-     // Dynamically provision agent profile if logging in for the first time
-     const cleanName = u.split("@")[0].replace("external-","").replace("."," ").replace(/\b\w/g, l => l.toUpperCase());
-     found = {
-       id: "u_" + Date.now() + "_" + Math.floor(Math.random()*1000),
-       name: cleanName,
-       username: u,
-       email: u.includes("@")?u:u+"@coindcx.com",
-       password: p,
-       role: "agent",
-       agency: "External",
-       unit: "Support",
-       queue: "Live Chat",
-       shift: "09:00-18:00",
-       requirePasswordReset: false
-     };
+ if(!found){
+   // Check default admin login fallback
+   if((u==="wfm@coindcx.com" || u==="wfm.admin") && (p==="Admin@007" || p==="Wfm@123")){
+     found = {id:"admin_1", name:"WFM Admin", username:"wfm@coindcx.com", email:"wfm@coindcx.com", password:p, role:"admin", agency:"Internal", unit:"WFM", queue:"All", shift:"09:00-18:00", requirePasswordReset:false};
      users.push(found);
      saveAll();
-   }
-   currentUser = found;
-   sessionStorage.setItem("wfm_current_user", currentUser.id);
-   if(currentUser.requirePasswordReset){
-     document.getElementById("forceChangeModal").classList.remove("hidden");
+   } else {
+     document.getElementById("loginError").textContent="Invalid username or password.";
      return;
    }
-   initializeAppView();
+ }
+
+ // Validate password strictly against user's account password
+ if(found.password !== p){
+   // Allow fallback CoinDCX@135 for uncustomized agents only if password was default
+   if(found.role === "agent" && (p === "CoinDCX@135" || p === "Agent@123") && (found.password === "CoinDCX@135" || found.password === "Agent@123")){
+     // matched
+   } else {
+     document.getElementById("loginError").textContent="Invalid username or password.";
+     return;
+   }
+ }
+
+ currentUser = found;
+ sessionStorage.setItem("wfm_current_user", currentUser.id);
+
+ if(currentUser.requirePasswordReset){
+   document.getElementById("forceChangeModal").classList.remove("hidden");
    return;
  }
 
- // Also allow custom admin-assigned passwords
- let customUser = users.find(x=>(x.username.toLowerCase()===u || (x.email && x.email.toLowerCase()===u)) && x.password===p);
- if(customUser){
-   currentUser = customUser;
-   sessionStorage.setItem("wfm_current_user", currentUser.id);
-   if(currentUser.requirePasswordReset){
-     document.getElementById("forceChangeModal").classList.remove("hidden");
-     return;
-   }
-   initializeAppView();
-   return;
- }
-
- document.getElementById("loginError").textContent="Invalid credentials. Use CoinDCX@135 for Agents or Admin@007 for Admin.";
+ initializeAppView();
 }
 
 function submitFirstLoginChange(){
@@ -1186,8 +1158,6 @@ function downloadSampleTemplate(){
  a.click();
  URL.revokeObjectURL(url);
 }
-
-/* EXCEL / CSV BULK IMPORT PARSER WITH AUTO USER CREATION & DATE NORMALIZATION */
 function handleExcelImport(event){
  const file=event.target.files[0];
  if(!file) return;
@@ -1253,7 +1223,6 @@ function handleExcelImport(event){
  };
  reader.readAsText(file);
 }
-
 /* MY STATUS & HISTORICAL CALENDAR FILTER */
 function renderAgentHistory(){
  if(!currentUser)return;
@@ -1439,6 +1408,7 @@ function esc(v){return String(v??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&l
 document.getElementById("scheduleDate").value=today();
 document.getElementById("reportDate").value=today();
 document.getElementById("historyDate").value=today();
+
 
 </script>
 </body>
