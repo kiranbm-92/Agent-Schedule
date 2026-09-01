@@ -32,7 +32,7 @@ button{cursor:pointer;border:0}
 
 /* Modal Overlay */
 .modal-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(15,23,42,0.7);display:flex;align-items:center;justify-content:center;z-index:1000}
-.modal-card{width:440px;background:#fff;border-radius:16px;padding:28px;box-shadow:0 20px 50px rgba(0,0,0,0.3)}
+.modal-card{width:450px;background:#fff;border-radius:16px;padding:28px;box-shadow:0 20px 50px rgba(0,0,0,0.3)}
 
 /* App Topbar */
 .topbar{height:64px;background:#fff;border-bottom:1px solid var(--border);display:flex;align-items:center;
@@ -41,7 +41,7 @@ padding:0 18px;gap:12px;position:sticky;top:0;z-index:50}
 .badge{padding:5px 9px;border-radius:999px;font-size:12px;font-weight:700;background:#eaf2ff;color:#1d4ed8}
 .container{padding:18px;max-width:100%;overflow:hidden}
 
-/* Top-Right Screenshot Style Live AUX Selector Dropdown */
+/* Top-Right Live AUX Status Dropdown */
 .aux-dropdown-container{position:relative;margin-left:auto;display:flex;align-items:center}
 .aux-status-pill{display:flex;align-items:center;gap:8px;background:#f1f5f9;border:1px solid #cbd5e1;
 border-radius:999px;padding:6px 14px;font-size:13px;font-weight:800;cursor:pointer;box-shadow:0 2px 5px #0001;transition:all 0.2s}
@@ -63,7 +63,7 @@ border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,0.15);padding:10px;z-index:
 .tab.active{background:var(--primary);color:#fff}
 
 .card{background:#fff;border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:14px}
-.legend{display:flex;gap:7px;flex-wrap:wrap}.legend span{padding:6px 9px;border-radius:6px;font-size:12px;font-weight:700}
+.legend{display:flex;gap:7px;flex-wrap:wrap}.legend span{padding:6px 9px;border-radius:6px;font-size:12px;font-weight:700;cursor:grab}
 
 /* MODE 1: Continuous 24-Hour Timeline Plotter */
 .plot-wrap{border:1px solid var(--border);border-radius:10px;background:#fff;overflow:auto;max-height:70vh}
@@ -80,7 +80,7 @@ border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,0.15);padding:10px;z-index:
 .timeline-grid-overlay{position:absolute;top:0;bottom:0;left:0;right:0;display:flex;pointer-events:none}
 .grid-hour{width:60px;border-right:1px dashed #e2e8f0;height:100%}
 
-/* Draggable & Resizable AUX Block Styling */
+/* AUX Block Styling */
 .aux-block{position:absolute;top:6px;bottom:6px;border-radius:6px;padding:2px 6px;font-size:10px;font-weight:800;color:#fff;display:flex;align-items:center;justify-content:space-between;box-shadow:0 2px 5px rgba(0,0,0,0.25);cursor:grab;overflow:hidden;white-space:nowrap;transition:box-shadow 0.2s}
 .aux-block:active{cursor:grabbing;box-shadow:0 4px 10px rgba(0,0,0,0.35);z-index:30}
 .aux-block .delete-btn{font-size:11px;font-weight:900;margin-left:6px;cursor:pointer;background:rgba(0,0,0,0.3);border-radius:50%;width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;transition:background 0.2s}
@@ -99,7 +99,14 @@ border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,0.15);padding:10px;z-index:
 .tlfeedback{background:#ec4899;color:#fff}.qafeedback{background:#8b5cf6;color:#fff}
 .nht{background:#14b8a6;color:#fff}.pkt{background:#0ea5e9;color:#fff}
 .training{background:#6366f1;color:#fff}.coaching{background:#f97316;color:#fff}
-.offline{background:#64748b;color:#fff}.empty{background:#fff}
+.offline{background:#64748b;color:#fff}
+
+/* Leave / Off-time Schedule-only AUX Colors */
+.plannedleave{background:#0284c7;color:#fff}.sickleave{background:#e11d48;color:#fff}
+.ncns{background:#881337;color:#fff}.unpaidleave{background:#475569;color:#fff}
+.casualleave{background:#d97706;color:#fff}.holiday{background:#059669;color:#fff}
+.compoff{background:#7c3aed;color:#fff}.unplannedleave{background:#b91c1c;color:#fff}
+.empty{background:#fff}
 
 /* Agent timer */
 .agent-panel{display:grid;grid-template-columns:2fr 1fr;gap:14px}
@@ -226,7 +233,7 @@ border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,0.15);padding:10px;z-index:
   <span id="topUser" class="badge"></span>
   <span id="liveClock" class="clock"></span>
 
-  <!-- TOP RIGHT SNAPSHOT-STYLE LIVE AUX SELECTOR DROPDOWN -->
+  <!-- TOP RIGHT SNAPSHOT-STYLE LIVE ACTIVE AUX DROPDOWN ONLY -->
   <div class="aux-dropdown-container">
     <div class="aux-status-pill" onclick="toggleAuxDropdown()">
       <span id="pillDot" class="status-dot" style="background:#22c55e"></span>
@@ -265,6 +272,8 @@ border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,0.15);padding:10px;z-index:
         <option value="grid15m">15-Minute Grid Interval Plotter View</option>
       </select>
 
+      <input type="file" id="excelFileInput" accept=".xlsx, .xls, .csv" class="hidden" onchange="handleExcelImport(event)">
+      <button class="secondary adminOnly" onclick="document.getElementById('excelFileInput').click()">📤 Import Excel/CSV</button>
       <button class="primary adminOnly" onclick="addAgent()">+ Add Agent</button>
       <button class="secondary adminOnly" onclick="clearSelectedAgent()">Clear Selected Day</button>
       <button class="secondary adminOnly" onclick="saveSchedules()">Save Schedule</button>
@@ -272,13 +281,18 @@ border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,0.15);padding:10px;z-index:
     </div>
 
     <div class="card">
-      <b>Interactive Schedule Plotter Tools:</b>
+      <b>Schedule Plotter Tools:</b>
       <div id="modeInstructionText" style="font-size:12px;color:#667085;margin-top:4px">
-        • <b>Drag AUX Blocks:</b> Click & drag any plotted AUX block horizontally across the 24-hour timeline to reposition it.<br>
-        • <b>Delete AUX Block:</b> Click the <b>✕</b> icon or right-click on any AUX block to delete it instantly.<br>
-        • <b>Double-Click on Track:</b> Opens exact time selection modal. Click <b>Copy</b> / <b>Paste</b> to replicate schedules.
+        • <b>Drag from Legend:</b> Drag any AUX code onto the 24-hour timeline to create a block.<br>
+        • <b>Drag Plotted Blocks:</b> Drag an existing block horizontally to reposition it. Movement snaps to 15 minutes.<br>
+        • <b>Double-click:</b> Choose exact AUX/start/end time.<br>
+        • <b>15-minute view:</b> Click/drag across cells to paint an AUX code; right-click to clear.<br>
+        • <b>Excel:</b> Upload multiple agents/dates/AUX rows using the sample template. Existing schedules for the uploaded date/agent are replaced by the imported rows.
       </div>
-      <div class="legend" id="legend" style="margin-top:10px"></div>
+      
+      <!-- FULL LEGEND INCLUDES ALL WORK & LEAVE AUX CODES -->
+      <div style="font-size:12px;font-weight:700;margin-top:10px">Work & Leave AUX Codes (Drag or click to plot):</div>
+      <div class="legend" id="legend" style="margin-top:6px"></div>
     </div>
 
     <!-- VIEW 1: CONTINUOUS TIMELINE -->
@@ -365,10 +379,11 @@ border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,0.15);padding:10px;z-index:
 
 <script>
 /* ==========================================================
-   WFM SCHEDULE PLOTTER - FULL AUX DRAG & DELETE ENGINE
+   WFM SCHEDULE PLOTTER - FULL AUX DEFINITIONS & SEPARATION
    ========================================================== */
 
-const AUX = [
+// 1. LIVE DROPDOWN AUX CODES (Active Agent Operational States)
+const LIVE_DROPDOWN_AUX = [
  {key:"available", label:"Available", short:"AV", color:"#22c55e"},
  {key:"break", label:"Break", short:"BR", color:"#3b82f6"},
  {key:"lunch", label:"Lunch", short:"LU", color:"#f59e0b"},
@@ -383,6 +398,21 @@ const AUX = [
  {key:"coaching", label:"Coaching", short:"CO", color:"#f97316"},
  {key:"offline", label:"Offline", short:"OF", color:"#64748b"}
 ];
+
+// 2. LEAVE & OFF-TIME AUX CODES (Visible in Schedule Plotter Legend & Modals only)
+const LEAVE_SCHEDULE_AUX = [
+ {key:"plannedleave", label:"Planned Leave", short:"PL", color:"#0284c7"},
+ {key:"sickleave", label:"Sick Leave", short:"SL", color:"#e11d48"},
+ {key:"ncns", label:"NCNS", short:"NC", color:"#881337"},
+ {key:"unpaidleave", label:"Unpaid Leave", short:"UL", color:"#475569"},
+ {key:"casualleave", label:"Casual Leave", short:"CL", color:"#d97706"},
+ {key:"holiday", label:"Holiday", short:"HD", color:"#059669"},
+ {key:"compoff", label:"Comp Off", short:"CO", color:"#7c3aed"},
+ {key:"unplannedleave", label:"Unplanned Leave", short:"UP", color:"#b91c1c"}
+];
+
+// Combine all AUX codes for Schedule Plotter lookup and rendering
+const ALL_AUX = [...LIVE_DROPDOWN_AUX, ...LEAVE_SCHEDULE_AUX];
 
 const defaultUsers = [
  {id:"u1",name:"WFM Admin",username:"wfm.admin",email:"admin@wfm.com",password:"Wfm@123",role:"admin",agency:"Internal",unit:"WFM",queue:"All",shift:"09:00-18:00",requirePasswordReset:false},
@@ -583,14 +613,14 @@ function switchPlotMode(){
  renderPlot();
 }
 
-/* DOUBLE CLICK TIME SELECTION MODAL */
+/* DOUBLE CLICK TIME SELECTION MODAL (INCLUDES ALL WORK & LEAVE AUX CODES) */
 function openTimePlotModal(agentId, clickedMin){
  targetPlotAgentId=agentId;
  const agent=users.find(u=>u.id===agentId);
  document.getElementById("modalAgentName").textContent=agent?.name||"Agent";
  
  const sel=document.getElementById("modalAuxSelect");
- sel.innerHTML=AUX.map(a=>`<option value="${a.key}">${a.label}</option>`).join("");
+ sel.innerHTML=ALL_AUX.map(a=>`<option value="${a.key}">${a.label}</option>`).join("");
  sel.value=selectedAux;
 
  const startH=Math.floor(clickedMin/60), startM=clickedMin%60;
@@ -634,19 +664,19 @@ function confirmTimePlot(){
  closeTimePlotModal();
 }
 
-/* TOP-RIGHT SNAPSHOT DROPDOWN */
+/* TOP-RIGHT SNAPSHOT DROPDOWN (ONLY SHOWS LIVE OPERATIONAL AUX CODES) */
 function toggleAuxDropdown(){
  const menu=document.getElementById("auxDropdownMenu");
  menu.classList.toggle("hidden");
  if(!menu.classList.contains("hidden")){
    document.getElementById("auxSearchInput").focus();
-   renderAuxDropdownList(AUX);
+   renderAuxDropdownList(LIVE_DROPDOWN_AUX);
  }
 }
 
 function filterAuxDropdown(){
  const query=document.getElementById("auxSearchInput").value.toLowerCase();
- const filtered=AUX.filter(a=>a.label.toLowerCase().includes(query));
+ const filtered=LIVE_DROPDOWN_AUX.filter(a=>a.label.toLowerCase().includes(query));
  renderAuxDropdownList(filtered);
 }
 
@@ -675,8 +705,8 @@ function changeActiveAux(key){
  currentActiveAux=key;
  auxStartTime=now;
  const a=auxByKey(key);
- document.getElementById("pillDot").style.background=a.color;
- document.getElementById("pillText").textContent=a.label;
+ document.getElementById("pillDot").style.background=a?.color||"#22c55e";
+ document.getElementById("pillText").textContent=a?.label||"Available";
  updateLiveTimer();
  renderAgentHistory();
 }
@@ -754,7 +784,7 @@ function renderPlot(){
  }
 }
 
-/* VIEW 1: CONTINUOUS 24H TIMELINE WITH AUX BLOCK DRAGGING & DELETION */
+/* VIEW 1: CONTINUOUS 24H TIMELINE WITH DRAG FROM LEGEND & BLOCK REPOSITIONING */
 function renderTimelineHeader(){
  const hdr=document.getElementById("timelineHeader");
  hdr.innerHTML="";
@@ -796,6 +826,25 @@ function renderContinuousTimelineView(agents, date){
    }
    track.appendChild(bgGrid);
 
+   // ALLOW DRAGGING AUX CODES FROM LEGEND DIRECTLY ONTO TRACK
+   if(currentUser.role==="admin"){
+     track.ondragover=(e)=>e.preventDefault();
+     track.ondrop=(e)=>{
+       e.preventDefault();
+       const auxKey=e.dataTransfer.getData("text/plain");
+       if(auxKey){
+         const rect=track.getBoundingClientRect();
+         const dropX=Math.max(0, Math.min(1439, Math.floor(e.clientX - rect.left)));
+         // Snap to 15-min intervals (15px)
+         const snappedStart=Math.floor(dropX/15)*15;
+         const blocks=getAgentBlocks(agent.id, date);
+         blocks.push({auxKey, startMin: snappedStart, endMin: Math.min(1440, snappedStart+60)});
+         saveAll();
+         renderPlot();
+       }
+     };
+   }
+
    const blocks=getAgentBlocks(agent.id, date);
    blocks.forEach((blk, idx)=>{
      const blockEl=document.createElement("div");
@@ -807,7 +856,7 @@ function renderContinuousTimelineView(agents, date){
       ${currentUser.role==="admin"?`<span class="delete-btn" title="Delete AUX Block" onclick="deleteAuxBlock(event, '${agent.id}', '${date}', ${idx})">✕</span>`:""}`;
      
      if(currentUser.role==="admin"){
-       // DRAG REPOSITION AUX BLOCK ACROSS TIMELINE TRACK
+       // DRAG REPOSITION AUX BLOCK WITH 15-MINUTE SNAPPING
        blockEl.onmousedown=(e)=>{
          if(e.target.classList.contains("delete-btn")) return;
          e.stopPropagation();
@@ -835,18 +884,19 @@ function renderContinuousTimelineView(agents, date){
  });
 }
 
-/* DRAG HORIZONTALLY TO REPOSITION AUX BLOCK */
+/* DRAG HORIZONTALLY TO REPOSITION AUX BLOCK (SNAPS TO 15-MIN INTERVALS) */
 function initDragMoveBlock(e, agentId, date, blockIdx, track){
  const blocks=getAgentBlocks(agentId, date);
  const target=blocks[blockIdx];
  const duration = target.endMin - target.startMin;
- const trackRect = track.getBoundingClientRect();
  const startMouseX = e.clientX;
  const origStartMin = target.startMin;
 
  function onMouseMove(me){
    const deltaX = Math.floor(me.clientX - startMouseX);
    let newStart = Math.max(0, Math.min(1440 - duration, origStartMin + deltaX));
+   // Snap movement to 15-minute intervals
+   newStart = Math.round(newStart / 15) * 15;
    target.startMin = newStart;
    target.endMin = newStart + duration;
    renderPlot();
@@ -961,6 +1011,48 @@ function clearSelectedAgent(){
 }
 function saveSchedules(){saveAll();alert("Schedules saved in browser.");}
 
+/* EXCEL / CSV BULK IMPORT PARSER */
+function handleExcelImport(event){
+ const file=event.target.files[0];
+ if(!file) return;
+ 
+ const reader=new FileReader();
+ reader.onload=function(e){
+   const text=e.target.result;
+   const lines=text.split(/\r?\n/);
+   let count=0;
+   
+   lines.forEach((line, idx)=>{
+     if(idx===0 || !line.trim()) return; // Skip header
+     const cols=line.split(",").map(c=>c.replace(/^["']|["']$/g,"").trim());
+     if(cols.length>=4){
+       const [date, username, auxLabel, startTime, endTime]=cols;
+       const agent=users.find(u=>u.username.toLowerCase()===username.toLowerCase());
+       if(agent){
+         const aux=ALL_AUX.find(a=>a.label.toLowerCase()===auxLabel.toLowerCase() || a.key.toLowerCase()===auxLabel.toLowerCase());
+         if(aux){
+           const key=dayKey(date, agent.id);
+           if(!continuousSchedules[key]) continuousSchedules[key]=[];
+           
+           if(startTime && endTime){
+             const [sH, sM]=startTime.split(":").map(Number);
+             const [eH, eM]=endTime.split(":").map(Number);
+             const startMin = (sH*60)+sM;
+             const endMin = (eH*60)+eM;
+             continuousSchedules[key].push({auxKey: aux.key, startMin, endMin});
+             count++;
+           }
+         }
+       }
+     }
+   });
+   saveAll();
+   renderPlot();
+   alert(`Successfully imported ${count} schedule rows from ${file.name}!`);
+ };
+ reader.readAsText(file);
+}
+
 /* MY STATUS & HISTORICAL CALENDAR FILTER */
 function renderAgentHistory(){
  if(!currentUser)return;
@@ -971,13 +1063,13 @@ function renderAgentHistory(){
  const logs=auxLogs[histDate+"_"+currentUser.id]||[];
  
  const totals={};
- AUX.forEach(a=>totals[a.key]=0);
+ LIVE_DROPDOWN_AUX.forEach(a=>totals[a.key]=0);
  logs.forEach(l=>{
    if(totals[l.auxKey]!==undefined) totals[l.auxKey]+=l.durationSec;
  });
 
  let html='<div class="kpis">';
- AUX.slice(0,4).forEach(a=>html+=`<div class="kpi"><b>${fmt(totals[a.key])}</b><small>${a.label}</small></div>`);
+ LIVE_DROPDOWN_AUX.slice(0,4).forEach(a=>html+=`<div class="kpi"><b>${fmt(totals[a.key])}</b><small>${a.label}</small></div>`);
  html+='</div>';
  document.getElementById("todaySummary").innerHTML=html;
 
@@ -1100,9 +1192,12 @@ function showTab(tab){
 
 function renderLegend(){
  const box=document.getElementById("legend"); box.innerHTML="";
- AUX.forEach(a=>{
-  const s=document.createElement("span"); s.className=a.key; s.textContent=a.label;
-  s.style.cursor=currentUser.role==="admin"?"pointer":"default";
+ ALL_AUX.forEach(a=>{
+  const s=document.createElement("span"); 
+  s.className=a.key; 
+  s.textContent=a.label;
+  s.draggable=currentUser.role==="admin";
+  s.ondragstart=(e)=>e.dataTransfer.setData("text/plain", a.key);
   if(currentUser.role==="admin"){
    s.onclick=()=>{selectedAux=a.key;document.querySelectorAll(".legend span").forEach(x=>x.style.outline="");s.style.outline="3px solid #111"};
   }
@@ -1117,7 +1212,7 @@ function populateFilters(){
  document.getElementById("queueFilter").innerHTML='<option value="">All Queues</option>'+queues.map(x=>`<option>${esc(x)}</option>`).join("");
 }
 
-function auxByKey(k){return AUX.find(a=>a.key===k)}
+function auxByKey(k){return ALL_AUX.find(a=>a.key===k)}
 function fmt(seconds){
  const h=Math.floor(seconds/3600),m=Math.floor((seconds%3600)/60),s=seconds%60;
  return [h,m,s].map((x,i)=>String(x).padStart(2,"0")).join(":");
