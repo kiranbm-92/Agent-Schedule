@@ -1142,19 +1142,20 @@ function saveSchedules(){saveAll();alert("Schedules saved in browser.");}
 /* DOWNLOAD SAMPLE CSV TEMPLATE FOR ADMINS */
 function downloadSampleTemplate(){
  const sampleLines = [
-   "Start_Date,End_Date,Username,AUX_Code,Start_Time,End_Time",
-   "2026-09-01,2026-09-01,external-syed.pasha@coindcx.com,Available,07:00,16:00",
-   "2026-09-01,2026-09-02,external-mohan.k@coindcx.com,Available,23:00,08:00",
-   "2026-09-01,2026-09-02,external-sneha.das@coindcx.com,Available,23:00,08:00",
-   "2026-09-01,2026-09-01,external-bibekananda.bariki@coindcx.com,Week Off,00:00,23:59",
-   "2026-09-02,2026-09-02,external-syed.pasha@coindcx.com,Available,07:00,16:00"
+   "Start_Date,End Date,Username,AUX_Code,Start_Time,End_Time",
+   "9/1/26,9/1/26,external-syed.pasha@coindcx.com,Available,07:00,16:00",
+   "9/1/26,9/1/26,external-pritam.kumar@coindcx.com,Available,15:00,00:00",
+   "9/1/26,9/2/26,external-mohan.k@coindcx.com,Available,23:00,08:00",
+   "9/1/26,9/1/26,external-bibekananda.bariki@coindcx.com,Week Off,07:00,16:00",
+   "9/1/26,9/1/26,external-nawaz.p@coindcx.com,Planned Leave,15:00,00:00",
+   "9/1/26,9/2/26,external-mohammed.roshan@coindcx.com,Comp Off,23:00,08:00"
  ];
  const sampleContent = sampleLines.join("\n");
  const blob = new Blob([sampleContent], {type: "text/csv;charset=utf-8"});
  const url = URL.createObjectURL(blob);
  const a = document.createElement("a");
  a.href = url;
- a.download = "WFM_Overnight_Schedule_Upload_Template.csv";
+ a.download = "WFM_Schedule_Upload_Template.csv";
  a.click();
  URL.revokeObjectURL(url);
 }
@@ -1173,8 +1174,6 @@ function handleExcelImport(event){
      if(idx===0 || !line.trim()) return;
      const cols=line.split(",").map(c=>c.replace(/^["']|["']$/g,"").trim());
      
-     // Support both 6-column (Start_Date, End_Date, Username, AUX_Code, Start_Time, End_Time)
-     // and legacy 5-column (Date, Username, AUX_Code, Start_Time, End_Time)
      let startDate, endDate, username, auxLabel, startTime, endTime;
      if(cols.length>=6){
        [startDate, endDate, username, auxLabel, startTime, endTime] = cols;
@@ -1216,28 +1215,34 @@ function handleExcelImport(event){
        const [eH, eM]=endTime.split(":").map(Number);
        const startMin = (sH*60)+sM;
        let endMin = (eH*60)+eM;
+       const realEndMin = (endMin === 0) ? 1440 : endMin;
 
-       // Check if shift is overnight (spans across midnight, e.g., 23:00 to 08:00 or Start_Date != End_Date)
-       const isOvernight = (normStartDate !== normEndDate) || (endMin <= startMin);
+       if(normStartDate !== normEndDate && normEndDate !== ""){
+         // Shift explicitly spans across dates (e.g. 9/1/26 to 9/2/26)
+         const key1 = dayKey(normStartDate, agent.id);
+         if(!continuousSchedules[key1]) continuousSchedules[key1]=[];
+         continuousSchedules[key1].push({auxKey: aux.key, startMin: startMin, endMin: 1440});
 
-       if(isOvernight){
-         // DAY 1 (Start_Date): Start_Time -> 24:00 (1440 min)
-         const keyDay1 = dayKey(normStartDate, agent.id);
-         if(!continuousSchedules[keyDay1]) continuousSchedules[keyDay1]=[];
-         continuousSchedules[keyDay1].push({auxKey: aux.key, startMin: startMin, endMin: 1440});
+         const key2 = dayKey(normEndDate, agent.id);
+         if(!continuousSchedules[key2]) continuousSchedules[key2]=[];
+         continuousSchedules[key2].push({auxKey: aux.key, startMin: 0, endMin: realEndMin});
+         count++;
+       } else if(realEndMin <= startMin && endMin > 0){
+         // Same date specified, but time wraps around midnight (e.g., 23:00 to 08:00)
+         const key1 = dayKey(normStartDate, agent.id);
+         if(!continuousSchedules[key1]) continuousSchedules[key1]=[];
+         continuousSchedules[key1].push({auxKey: aux.key, startMin: startMin, endMin: 1440});
 
-         // DAY 2 (End_Date): 00:00 (0 min) -> End_Time (or 08:00 = 480 min)
-         const day2Date = normEndDate !== normStartDate ? normEndDate : calculateNextDate(normStartDate);
-         const keyDay2 = dayKey(day2Date, agent.id);
-         if(!continuousSchedules[keyDay2]) continuousSchedules[keyDay2]=[];
-         const realEndMin = (endMin === 0) ? 1440 : endMin;
-         continuousSchedules[keyDay2].push({auxKey: aux.key, startMin: 0, endMin: realEndMin});
+         const day2Date = calculateNextDate(normStartDate);
+         const key2 = dayKey(day2Date, agent.id);
+         if(!continuousSchedules[key2]) continuousSchedules[key2]=[];
+         continuousSchedules[key2].push({auxKey: aux.key, startMin: 0, endMin: endMin});
          count++;
        } else {
-         // STANDARD SAME-DAY SHIFT
-         const keySameDay = dayKey(normStartDate, agent.id);
-         if(!continuousSchedules[keySameDay]) continuousSchedules[keySameDay]=[];
-         continuousSchedules[keySameDay].push({auxKey: aux.key, startMin: startMin, endMin: endMin});
+         // Standard same-day shift (including 15:00 to 00:00 where realEndMin = 1440)
+         const keySame = dayKey(normStartDate, agent.id);
+         if(!continuousSchedules[keySame]) continuousSchedules[keySame]=[];
+         continuousSchedules[keySame].push({auxKey: aux.key, startMin: startMin, endMin: realEndMin});
          count++;
        }
      }
@@ -1246,15 +1251,9 @@ function handleExcelImport(event){
    populateFilters();
    renderAdmin();
    renderPlot();
-   alert(`Successfully imported ${count} schedule entries from ${file.name}! Overnight shifts crossing midnight have been split across both days.`);
+   alert(`Successfully imported ${count} schedule entries from ${file.name}! Multi-day overnight shifts crossing midnight have been split across both dates.`);
  };
  reader.readAsText(file);
-}
-
-function calculateNextDate(dateStr){
- const d = new Date(dateStr + "T00:00:00");
- d.setDate(d.getDate() + 1);
- return d.toISOString().slice(0, 10);
 }
 
 /* MY STATUS & HISTORICAL CALENDAR FILTER */
