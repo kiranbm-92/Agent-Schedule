@@ -274,7 +274,8 @@ border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,0.15);padding:10px;z-index:
       <button class="secondary adminOnly" onclick="downloadSampleTemplate()">📥 Download Sample Template (.csv)</button>
       <button class="secondary adminOnly" onclick="document.getElementById('excelFileInput').click()">📤 Import Excel/CSV</button>
       <button class="primary adminOnly" onclick="addAgent()">+ Add Agent</button>
-      <button class="secondary adminOnly" onclick="clearSelectedAgent()">Clear Selected Day</button>
+      <button class="danger adminOnly" onclick="clearWholeDaySchedule()" style="background:#dc2626">🗑️ Clear Whole Day (All Agents)</button>
+      <button class="secondary adminOnly" onclick="clearSelectedAgent()">Clear Particular Agent Schedule</button>
       <button class="secondary adminOnly" onclick="saveSchedules()">Save Schedule</button>
       <button class="secondary adminOnly" onclick="exportCSV()">Export AUX CSV</button>
     </div>
@@ -944,6 +945,7 @@ function renderContinuousTimelineView(agents, date){
      <div style="display:flex;gap:4px">
        <button class="secondary" style="padding:4px 8px;font-size:10px;font-weight:bold" onclick="copySchedule('${agent.id}')">Copy</button>
        <button class="primary" style="padding:4px 8px;font-size:10px;font-weight:bold" onclick="pasteSchedule('${agent.id}')">Paste</button>
+       <button class="danger" style="padding:4px 8px;font-size:10px;font-weight:bold;background:#dc2626" onclick="clearAgentDaySchedule('${agent.id}', '${date}')">Clear</button>
      </div>`:""}`;
    labelsCol.appendChild(lbl);
 
@@ -1128,14 +1130,38 @@ function pasteSchedule(targetAgentId){
  alert(`Pasted schedule to ${users.find(u=>u.id===targetAgentId)?.name}`);
 }
 
+function clearWholeDaySchedule(){
+ if(currentUser.role!=="admin")return;
+ if(!confirm(`Are you sure you want to clear ALL agent schedules for ${selectedDate}?`)) return;
+ 
+ const agents = users.filter(u=>u.role==="agent");
+ agents.forEach(agent=>{
+   continuousSchedules[dayKey(selectedDate, agent.id)] = [];
+   grid15mSchedules[dayKey(selectedDate, agent.id)] = Array(96).fill("");
+ });
+ saveAll();
+ renderPlot();
+ alert(`Successfully cleared all agent schedules for ${selectedDate}.`);
+}
+
 function clearSelectedAgent(){
  if(currentUser.role!=="admin")return;
- const name=prompt("Enter agent username to clear:");
- const agent=users.find(u=>u.username===name);
- if(!agent)return alert("Agent not found.");
- continuousSchedules[dayKey(selectedDate,agent.id)]=[];
- grid15mSchedules[dayKey(selectedDate,agent.id)]=Array(96).fill("");
- saveAll();renderPlot();
+ const inputName = prompt("Enter Agent Name or Username to clear schedule for " + selectedDate + ":");
+ if(!inputName) return;
+ const agent = users.find(u=>u.username.toLowerCase()===inputName.trim().toLowerCase() || u.name.toLowerCase()===inputName.trim().toLowerCase());
+ if(!agent) return alert("Agent not found with name/username: " + inputName);
+ 
+ clearAgentDaySchedule(agent.id, selectedDate);
+}
+
+function clearAgentDaySchedule(agentId, dateStr){
+ if(currentUser.role!=="admin")return;
+ const agent = users.find(u=>u.id===agentId);
+ continuousSchedules[dayKey(dateStr, agentId)] = [];
+ grid15mSchedules[dayKey(dateStr, agentId)] = Array(96).fill("");
+ saveAll();
+ renderPlot();
+ alert(`Cleared schedule for ${agent?.name || 'Agent'} on ${dateStr}.`);
 }
 function saveSchedules(){saveAll();alert("Schedules saved in browser.");}
 
