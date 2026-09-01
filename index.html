@@ -102,11 +102,11 @@ border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,0.15);padding:10px;z-index:
 .offline{background:#64748b;color:#fff}
 
 /* Leave / Off-time Schedule-only AUX Colors */
-.plannedleave{background:#0284c7;color:#fff}.sickleave{background:#e11d48;color:#fff}
-.ncns{background:#881337;color:#fff}.unpaidleave{background:#475569;color:#fff}
-.casualleave{background:#d97706;color:#fff}.holiday{background:#059669;color:#fff}
-.compoff{background:#7c3aed;color:#fff}.unplannedleave{background:#b91c1c;color:#fff}
-.empty{background:#fff}
+.weekoff{background:#64748b;color:#fff}.plannedleave{background:#0284c7;color:#fff}
+.sickleave{background:#e11d48;color:#fff}.ncns{background:#881337;color:#fff}
+.unpaidleave{background:#475569;color:#fff}.casualleave{background:#d97706;color:#fff}
+.holiday{background:#059669;color:#fff}.compoff{background:#7c3aed;color:#fff}
+.unplannedleave{background:#b91c1c;color:#fff}.empty{background:#fff}
 
 /* Agent timer */
 .agent-panel{display:grid;grid-template-columns:2fr 1fr;gap:14px}
@@ -129,7 +129,7 @@ border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,0.15);padding:10px;z-index:
   <div class="login-card">
     <h1>WFM Schedule Plotter</h1>
     <p>Sign in with <b>ANY username and password</b> (Universal Credentials enabled).</p>
-    <div class="field"><label>Username</label><input id="loginUser" placeholder="e.g. any.user or wfm.admin"></div>
+    <div class="field"><label>Username</label><input id="loginUser" placeholder="e.g. agent001 or wfm.admin"></div>
     <div class="field">
       <label>Password</label>
       <input id="loginPass" type="password" placeholder="Any password">
@@ -138,7 +138,7 @@ border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,0.15);padding:10px;z-index:
     <button class="primary" style="width:100%" onclick="login()">Sign In</button>
     <div id="loginError" class="login-error"></div>
     <div style="margin-top:18px;font-size:11px;color:#667085">
-      <b>Universal Access:</b> Type any username/password to log in immediately. Type <b>admin</b> or <b>wfm.admin</b> for Admin privilege.
+      <b>Universal Access:</b> Type any username/password to log in. Include <b>admin</b> or <b>wfm.admin</b> for Admin privileges.
     </div>
   </div>
 </section>
@@ -401,8 +401,9 @@ const LIVE_DROPDOWN_AUX = [
  {key:"offline", label:"Offline", short:"OF", color:"#64748b"}
 ];
 
-// 2. LEAVE & OFF-TIME AUX CODES (Visible in Schedule Plotter Legend & Modals only)
+// 2. LEAVE & OFF-TIME AUX CODES (Includes Week Off, Visible in Schedule Plotter Legend & Modals only)
 const LEAVE_SCHEDULE_AUX = [
+ {key:"weekoff", label:"Week Off", short:"WO", color:"#64748b"},
  {key:"plannedleave", label:"Planned Leave", short:"PL", color:"#0284c7"},
  {key:"sickleave", label:"Sick Leave", short:"SL", color:"#e11d48"},
  {key:"ncns", label:"NCNS", short:"NC", color:"#881337"},
@@ -459,6 +460,25 @@ function saveAll(){
 
 document.addEventListener("mousedown",()=>isMouseDown=true);
 document.addEventListener("mouseup",()=>isMouseDown=false);
+
+/* DATE NORMALIZATION FUNCTION FOR CSV & SCHEDULING (Supports YYYY-MM-DD, M/D/YY, MM/DD/YYYY) */
+function normalizeDateStr(dateStr) {
+  if (!dateStr) return today();
+  dateStr = dateStr.trim();
+  let parts = dateStr.replace(/-/g, "/").split("/");
+  if (parts.length === 3) {
+    let p1 = parts[0], p2 = parts[1], p3 = parts[2];
+    let y, m, d;
+    if (p1.length === 4) { // YYYY/MM/DD
+      y = parseInt(p1); m = parseInt(p2); d = parseInt(p3);
+    } else { // M/D/YY or MM/DD/YYYY
+      m = parseInt(p1); d = parseInt(p2); y = parseInt(p3);
+      if (y < 100) y += 2000;
+    }
+    return String(y).padStart(4,"0") + "-" + String(m).padStart(2,"0") + "-" + String(d).padStart(2,"0");
+  }
+  return dateStr;
+}
 
 /* UNIVERSAL CREDENTIAL LOGIN */
 function login(){
@@ -766,7 +786,7 @@ function timeLabel15m(i){
  return String(h).padStart(2,"0")+":"+String(m).padStart(2,"0");
 }
 
-/* RENDER PLOTTER (DUAL MODE WITH AGENT ISOLATION) */
+/* RENDER PLOTTER (DUAL MODE WITH STRICT AGENT ISOLATION) */
 function renderPlot(){
  const date=document.getElementById("scheduleDate").value||today();
  selectedDate=date;
@@ -774,7 +794,7 @@ function renderPlot(){
 
  // AGENT LOGIN ISOLATION: Non-admin users see strictly THEIR OWN row
  if(currentUser && currentUser.role!=="admin"){
-   agents = agents.filter(u=>u.id===currentUser.id || u.username===currentUser.username);
+   agents = agents.filter(u=>u.id===currentUser.id || u.username.toLowerCase()===currentUser.username.toLowerCase());
  } else {
    const search=document.getElementById("searchAgent").value.toLowerCase();
    const agency=document.getElementById("agencyFilter").value;
@@ -1017,7 +1037,7 @@ function saveSchedules(){saveAll();alert("Schedules saved in browser.");}
 
 /* DOWNLOAD SAMPLE CSV TEMPLATE FOR ADMINS */
 function downloadSampleTemplate(){
- const sampleContent = "Date,Username,AUX_Code,Start_Time,End Time\n2026-09-01,agent001,Available,08:00,12:00\n2026-09-01,agent001,Lunch,12:00,13:00\n2026-09-01,agent001,Available,13:00,17:00\n2026-09-01,agent002,Planned Leave,00:00,23:59";
+ const sampleContent = "Date,Username,AUX_Code,Start_Time,End Time\n9/1/26,external-syed.pasha@coindcx.com,Available,07:00,16:00\n9/1/26,external-pritam.kumar@coindcx.com,Available,15:00,00:00\n9/1/26,external-bibekananda.bariki@coindcx.com,Week Off,07:00,16:00\n9/1/26,external-nawaz.p@coindcx.com,Planned Leave,15:00,00:00\n9/1/26,external-mohammed.roshan@coindcx.com,Comp Off,23:00,08:00";
  const blob = new Blob([sampleContent], {type: "text/csv;charset=utf-8"});
  const url = URL.createObjectURL(blob);
  const a = document.createElement("a");
@@ -1027,7 +1047,7 @@ function downloadSampleTemplate(){
  URL.revokeObjectURL(url);
 }
 
-/* EXCEL / CSV BULK IMPORT PARSER */
+/* EXCEL / CSV BULK IMPORT PARSER WITH AUTO USER CREATION & DATE NORMALIZATION */
 function handleExcelImport(event){
  const file=event.target.files[0];
  if(!file) return;
@@ -1042,29 +1062,57 @@ function handleExcelImport(event){
      if(idx===0 || !line.trim()) return;
      const cols=line.split(",").map(c=>c.replace(/^["']|["']$/g,"").trim());
      if(cols.length>=4){
-       const [date, username, auxLabel, startTime, endTime]=cols;
-       const agent=users.find(u=>u.username.toLowerCase()===username.toLowerCase());
-       if(agent){
-         const aux=ALL_AUX.find(a=>a.label.toLowerCase()===auxLabel.toLowerCase() || a.key.toLowerCase()===auxLabel.toLowerCase());
-         if(aux){
-           const key=dayKey(date, agent.id);
-           if(!continuousSchedules[key]) continuousSchedules[key]=[];
+       let [rawDate, username, auxLabel, startTime, endTime]=cols;
+       if(!username) return;
+
+       // Normalize Date to YYYY-MM-DD
+       const normDate = normalizeDateStr(rawDate);
+
+       // Auto-find or create user profile
+       let agent = users.find(u=>u.username.toLowerCase()===username.toLowerCase() || (u.email && u.email.toLowerCase()===username.toLowerCase()));
+       if(!agent){
+         const cleanName = username.split("@")[0].replace("external-","").replace("."," ").replace(/ \w/g, l => l.toUpperCase());
+         agent = {
+           id: "u_" + Date.now() + "_" + Math.floor(Math.random()*1000),
+           name: cleanName,
+           username: username,
+           email: username.includes("@")?username:username+"@coindcx.com",
+           password: "Agent@123",
+           role: "agent",
+           agency: "External",
+           unit: "Support",
+           queue: "Live Chat",
+           shift: (startTime && endTime)?`${startTime}-${endTime}`:"09:00-18:00",
+           requirePasswordReset: false
+         };
+         users.push(agent);
+       }
+       
+       const aux=ALL_AUX.find(a=>a.label.toLowerCase()===auxLabel.toLowerCase() || a.key.toLowerCase()===auxLabel.toLowerCase());
+       if(aux){
+         const key=dayKey(normDate, agent.id);
+         if(!continuousSchedules[key]) continuousSchedules[key]=[];
+         
+         if(startTime && endTime){
+           const [sH, sM]=startTime.split(":").map(Number);
+           const [eH, eM]=endTime.split(":").map(Number);
+           const startMin = (sH*60)+sM;
+           let endMin = (eH*60)+eM;
            
-           if(startTime && endTime){
-             const [sH, sM]=startTime.split(":").map(Number);
-             const [eH, eM]=endTime.split(":").map(Number);
-             const startMin = (sH*60)+sM;
-             const endMin = (eH*60)+eM;
-             continuousSchedules[key].push({auxKey: aux.key, startMin, endMin});
-             count++;
-           }
+           // Midnight / Overnight Shift Handling
+           if(endMin <= startMin && endMin === 0) endMin = 1440;
+
+           continuousSchedules[key].push({auxKey: aux.key, startMin, endMin});
+           count++;
          }
        }
      }
    });
    saveAll();
+   populateFilters();
+   renderAdmin();
    renderPlot();
-   alert(`Successfully imported ${count} schedule rows from ${file.name}!`);
+   alert(`Successfully imported ${count} schedule entries from ${file.name}! Date set to ${selectedDate}.`);
  };
  reader.readAsText(file);
 }
