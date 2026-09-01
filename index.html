@@ -1061,6 +1061,7 @@ function render15mGridView(agents, date){
    <div style="display:flex;gap:4px">
      <button class="secondary" style="padding:4px 8px;font-size:10px;font-weight:bold" onclick="copySchedule('${agent.id}')">Copy</button>
      <button class="primary" style="padding:4px 8px;font-size:10px;font-weight:bold" onclick="pasteSchedule('${agent.id}')">Paste</button>
+     <button class="danger" style="padding:4px 8px;font-size:10px;font-weight:bold;background:#dc2626" onclick="clearAgentDaySchedule('${agent.id}', '${date}')">Clear</button>
    </div>`:""}`;
   container.appendChild(ac);
 
