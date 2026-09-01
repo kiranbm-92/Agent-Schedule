@@ -1142,22 +1142,23 @@ function saveSchedules(){saveAll();alert("Schedules saved in browser.");}
 /* DOWNLOAD SAMPLE CSV TEMPLATE FOR ADMINS */
 function downloadSampleTemplate(){
  const sampleLines = [
-   "Date,Username,AUX_Code,Start_Time,End Time",
-   "9/1/26,external-syed.pasha@coindcx.com,Available,07:00,16:00",
-   "9/1/26,external-pritam.kumar@coindcx.com,Available,15:00,00:00",
-   "9/1/26,external-bibekananda.bariki@coindcx.com,Week Off,07:00,16:00",
-   "9/1/26,external-nawaz.p@coindcx.com,Planned Leave,15:00,00:00",
-   "9/1/26,external-mohammed.roshan@coindcx.com,Comp Off,23:00,08:00"
+   "Start_Date,End_Date,Username,AUX_Code,Start_Time,End_Time",
+   "2026-09-01,2026-09-01,external-syed.pasha@coindcx.com,Available,07:00,16:00",
+   "2026-09-01,2026-09-02,external-mohan.k@coindcx.com,Available,23:00,08:00",
+   "2026-09-01,2026-09-02,external-sneha.das@coindcx.com,Available,23:00,08:00",
+   "2026-09-01,2026-09-01,external-bibekananda.bariki@coindcx.com,Week Off,00:00,23:59",
+   "2026-09-02,2026-09-02,external-syed.pasha@coindcx.com,Available,07:00,16:00"
  ];
  const sampleContent = sampleLines.join("\n");
  const blob = new Blob([sampleContent], {type: "text/csv;charset=utf-8"});
  const url = URL.createObjectURL(blob);
  const a = document.createElement("a");
  a.href = url;
- a.download = "WFM_Schedule_Upload_Template.csv";
+ a.download = "WFM_Overnight_Schedule_Upload_Template.csv";
  a.click();
  URL.revokeObjectURL(url);
 }
+
 function handleExcelImport(event){
  const file=event.target.files[0];
  if(!file) return;
@@ -1171,47 +1172,73 @@ function handleExcelImport(event){
    lines.forEach((line, idx)=>{
      if(idx===0 || !line.trim()) return;
      const cols=line.split(",").map(c=>c.replace(/^["']|["']$/g,"").trim());
-     if(cols.length>=4){
-       let [rawDate, username, auxLabel, startTime, endTime]=cols;
-       if(!username) return;
+     
+     // Support both 6-column (Start_Date, End_Date, Username, AUX_Code, Start_Time, End_Time)
+     // and legacy 5-column (Date, Username, AUX_Code, Start_Time, End_Time)
+     let startDate, endDate, username, auxLabel, startTime, endTime;
+     if(cols.length>=6){
+       [startDate, endDate, username, auxLabel, startTime, endTime] = cols;
+     } else if(cols.length>=5){
+       [startDate, username, auxLabel, startTime, endTime] = cols;
+       endDate = startDate;
+     } else {
+       return;
+     }
 
-       const normDate = normalizeDateStr(rawDate);
+     if(!username) return;
 
-       let agent = users.find(u=>u.username.toLowerCase()===username.toLowerCase() || (u.email && u.email.toLowerCase()===username.toLowerCase()));
-       if(!agent){
-         const cleanName = username.split("@")[0].replace("external-","").replace("."," ").replace(/\b\w/g, l => l.toUpperCase());
-         agent = {
-           id: "u_" + Date.now() + "_" + Math.floor(Math.random()*1000),
-           name: cleanName,
-           username: username,
-           email: username.includes("@")?username:username+"@coindcx.com",
-           password: "Agent@123",
-           role: "agent",
-           agency: "External",
-           unit: "Support",
-           queue: "Live Chat",
-           shift: (startTime && endTime)?`${startTime}-${endTime}`:"09:00-18:00",
-           requirePasswordReset: false
-         };
-         users.push(agent);
-       }
-       
-       const aux=ALL_AUX.find(a=>a.label.toLowerCase()===auxLabel.toLowerCase() || a.key.toLowerCase()===auxLabel.toLowerCase());
-       if(aux){
-         const key=dayKey(normDate, agent.id);
-         if(!continuousSchedules[key]) continuousSchedules[key]=[];
-         
-         if(startTime && endTime){
-           const [sH, sM]=startTime.split(":").map(Number);
-           const [eH, eM]=endTime.split(":").map(Number);
-           const startMin = (sH*60)+sM;
-           let endMin = (eH*60)+eM;
-           
-           if(endMin <= startMin && endMin === 0) endMin = 1440;
+     const normStartDate = normalizeDateStr(startDate);
+     const normEndDate = normalizeDateStr(endDate || startDate);
 
-           continuousSchedules[key].push({auxKey: aux.key, startMin, endMin});
-           count++;
-         }
+     // Auto-find or create user profile
+     let agent = users.find(u=>u.username.toLowerCase()===username.toLowerCase() || (u.email && u.email.toLowerCase()===username.toLowerCase()));
+     if(!agent){
+       const cleanName = username.split("@")[0].replace("external-","").replace("."," ").replace(/\b\w/g, l => l.toUpperCase());
+       agent = {
+         id: "u_" + Date.now() + "_" + Math.floor(Math.random()*1000),
+         name: cleanName,
+         username: username,
+         email: username.includes("@")?username:username+"@coindcx.com",
+         password: "Agent@123",
+         role: "agent",
+         agency: "External",
+         unit: "Support",
+         queue: "Live Chat",
+         shift: (startTime && endTime)?`${startTime}-${endTime}`:"09:00-18:00",
+         requirePasswordReset: false
+       };
+       users.push(agent);
+     }
+     
+     const aux=ALL_AUX.find(a=>a.label.toLowerCase()===auxLabel.toLowerCase() || a.key.toLowerCase()===auxLabel.toLowerCase());
+     if(aux && startTime && endTime){
+       const [sH, sM]=startTime.split(":").map(Number);
+       const [eH, eM]=endTime.split(":").map(Number);
+       const startMin = (sH*60)+sM;
+       let endMin = (eH*60)+eM;
+
+       // Check if shift is overnight (spans across midnight, e.g., 23:00 to 08:00 or Start_Date != End_Date)
+       const isOvernight = (normStartDate !== normEndDate) || (endMin <= startMin);
+
+       if(isOvernight){
+         // DAY 1 (Start_Date): Start_Time -> 24:00 (1440 min)
+         const keyDay1 = dayKey(normStartDate, agent.id);
+         if(!continuousSchedules[keyDay1]) continuousSchedules[keyDay1]=[];
+         continuousSchedules[keyDay1].push({auxKey: aux.key, startMin: startMin, endMin: 1440});
+
+         // DAY 2 (End_Date): 00:00 (0 min) -> End_Time (or 08:00 = 480 min)
+         const day2Date = normEndDate !== normStartDate ? normEndDate : calculateNextDate(normStartDate);
+         const keyDay2 = dayKey(day2Date, agent.id);
+         if(!continuousSchedules[keyDay2]) continuousSchedules[keyDay2]=[];
+         const realEndMin = (endMin === 0) ? 1440 : endMin;
+         continuousSchedules[keyDay2].push({auxKey: aux.key, startMin: 0, endMin: realEndMin});
+         count++;
+       } else {
+         // STANDARD SAME-DAY SHIFT
+         const keySameDay = dayKey(normStartDate, agent.id);
+         if(!continuousSchedules[keySameDay]) continuousSchedules[keySameDay]=[];
+         continuousSchedules[keySameDay].push({auxKey: aux.key, startMin: startMin, endMin: endMin});
+         count++;
        }
      }
    });
@@ -1219,10 +1246,17 @@ function handleExcelImport(event){
    populateFilters();
    renderAdmin();
    renderPlot();
-   alert(`Successfully imported ${count} schedule entries from ${file.name}!`);
+   alert(`Successfully imported ${count} schedule entries from ${file.name}! Overnight shifts crossing midnight have been split across both days.`);
  };
  reader.readAsText(file);
 }
+
+function calculateNextDate(dateStr){
+ const d = new Date(dateStr + "T00:00:00");
+ d.setDate(d.getDate() + 1);
+ return d.toISOString().slice(0, 10);
+}
+
 /* MY STATUS & HISTORICAL CALENDAR FILTER */
 function renderAgentHistory(){
  if(!currentUser)return;
