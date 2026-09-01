@@ -326,30 +326,12 @@ border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,0.15);padding:10px;z-index:
     </div>
   </section>
 
-  <!-- MY STATUS & HISTORICAL CALENDAR -->
+    <!-- MY STATUS & HISTORICAL CALENDAR -->
   <section id="agentSection" class="hidden">
     <div class="toolbar">
-      <input id="scheduleDate" class="adminOnly" type="date" onchange="renderPlot()">
-      
-      <!-- ADMIN-ONLY CONTROLS -->
-      <input id="searchAgent" class="adminOnly" placeholder="Search agent..." oninput="renderPlot()">
-      <select id="agencyFilter" class="adminOnly" onchange="renderPlot()"><option value="">All Agencies</option></select>
-      <select id="queueFilter" class="adminOnly" onchange="renderPlot()"><option value="">All Queues</option></select>
-      
-      <select id="plotModeSelect" class="adminOnly" onchange="switchPlotMode()" style="font-weight:700;border:1px solid #2563eb;color:#2563eb">
-        <option value="timeline">24-Hour Continuous Timeline View</option>
-        <option value="grid15m">15-Minute Grid Interval Plotter View</option>
-      </select>
-
-      <input type="file" id="excelFileInput" accept=".xlsx, .xls, .csv" class="hidden" onchange="handleExcelImport(event)">
-      <button class="secondary adminOnly" onclick="downloadSampleTemplate()">📥 Download Sample Template (.csv)</button>
-      <button class="secondary adminOnly" onclick="document.getElementById('excelFileInput').click()">📤 Import Excel/CSV</button>
-      <button class="primary adminOnly" onclick="addAgent()">+ Add Agent</button>
-      <button class="danger adminOnly" onclick="clearWholeDaySchedule()" style="background:#dc2626">🗑️ Clear Active Date (All Agents)</button>
-      <button class="secondary adminOnly" onclick="clearSelectedAgent()">Clear Particular Agent Schedule</button>
-      <button class="danger adminOnly" onclick="clearEntireDatabaseSchedules()" style="background:#991b1b">⚠️ Clear ALL System Schedules (All Dates)</button>
-      <button class="secondary adminOnly" onclick="saveSchedules()">Save Schedule</button>
-      <button class="secondary adminOnly" onclick="exportCSV()">Export AUX CSV</button>
+      <label style="font-size:13px;font-weight:700">Historical Date Filter:</label>
+      <input id="historyDate" type="date" onchange="renderAgentHistory()">
+      <button class="secondary" onclick="resetHistoryToToday()">Today</button>
     </div>
 
     <div class="agent-panel">
@@ -378,27 +360,8 @@ border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,0.15);padding:10px;z-index:
   <!-- DASHBOARD -->
   <section id="dashboardSection" class="hidden">
     <div class="toolbar">
-      <input id="scheduleDate" class="adminOnly" type="date" onchange="renderPlot()">
-      
-      <!-- ADMIN-ONLY CONTROLS -->
-      <input id="searchAgent" class="adminOnly" placeholder="Search agent..." oninput="renderPlot()">
-      <select id="agencyFilter" class="adminOnly" onchange="renderPlot()"><option value="">All Agencies</option></select>
-      <select id="queueFilter" class="adminOnly" onchange="renderPlot()"><option value="">All Queues</option></select>
-      
-      <select id="plotModeSelect" class="adminOnly" onchange="switchPlotMode()" style="font-weight:700;border:1px solid #2563eb;color:#2563eb">
-        <option value="timeline">24-Hour Continuous Timeline View</option>
-        <option value="grid15m">15-Minute Grid Interval Plotter View</option>
-      </select>
-
-      <input type="file" id="excelFileInput" accept=".xlsx, .xls, .csv" class="hidden" onchange="handleExcelImport(event)">
-      <button class="secondary adminOnly" onclick="downloadSampleTemplate()">📥 Download Sample Template (.csv)</button>
-      <button class="secondary adminOnly" onclick="document.getElementById('excelFileInput').click()">📤 Import Excel/CSV</button>
-      <button class="primary adminOnly" onclick="addAgent()">+ Add Agent</button>
-      <button class="danger adminOnly" onclick="clearWholeDaySchedule()" style="background:#dc2626">🗑️ Clear Active Date (All Agents)</button>
-      <button class="secondary adminOnly" onclick="clearSelectedAgent()">Clear Particular Agent Schedule</button>
-      <button class="danger adminOnly" onclick="clearEntireDatabaseSchedules()" style="background:#991b1b">⚠️ Clear ALL System Schedules (All Dates)</button>
-      <button class="secondary adminOnly" onclick="saveSchedules()">Save Schedule</button>
-      <button class="secondary adminOnly" onclick="exportCSV()">Export AUX CSV</button>
+      <input id="reportDate" type="date" onchange="renderDashboard()">
+      <button class="secondary" onclick="exportCSV()">Export Detailed AUX Report</button>
     </div>
     <div id="dashboardKpis" class="kpis"></div>
     <div class="card">
@@ -410,7 +373,7 @@ border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,0.15);padding:10px;z-index:
     </div>
   </section>
 
-  <!-- ADMIN -->
+<!-- ADMIN -->
   <section id="adminSection" class="hidden">
     <div class="card">
       <h3>Agent & Credential Management</h3>
