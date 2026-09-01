@@ -261,7 +261,7 @@ border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,0.15);padding:10px;z-index:
   <!-- PLOTTER -->
   <section id="plotSection">
     <div class="toolbar">
-      <input id="scheduleDate" type="date" onchange="renderPlot()">
+      <input id="scheduleDate" class="adminOnly" type="date" onchange="renderPlot()">
       
       <!-- ADMIN-ONLY CONTROLS -->
       <input id="searchAgent" class="adminOnly" placeholder="Search agent..." oninput="renderPlot()">
@@ -302,7 +302,7 @@ border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,0.15);padding:10px;z-index:
       <div class="plot-grid">
         <div>
           <div class="agent-head-cell">
-            <span>Agent Info</span>
+            <span id="agentHeadLabel">Agent Info / Schedule Dates</span>
             <small id="copiedNotice" style="color:#2563eb;font-weight:bold"></small>
           </div>
           <div id="agentRowsContainer"></div>
@@ -786,16 +786,47 @@ function timeLabel15m(i){
  return String(h).padStart(2,"0")+":"+String(m).padStart(2,"0");
 }
 
-/* RENDER PLOTTER (DUAL MODE WITH STRICT AGENT ISOLATION) */
+/* HELPER TO GET ALL DATES HAS SCHEDULES FOR AN AGENT */
+function getAgentScheduleDates(agentId){
+ const datesSet = new Set();
+ // Continuous schedules
+ Object.keys(continuousSchedules).forEach(key=>{
+   const [d, uId] = key.split("_");
+   if(uId === agentId && continuousSchedules[key].length > 0){
+     datesSet.add(d);
+   }
+ });
+ // 15m Grid schedules
+ Object.keys(grid15mSchedules).forEach(key=>{
+   const [d, uId] = key.split("_");
+   if(uId === agentId && grid15mSchedules[key].some(x=>x!=="")){
+     datesSet.add(d);
+   }
+ });
+ const arr = Array.from(datesSet).sort();
+ return arr.length > 0 ? arr : [selectedDate];
+}
+
+/* RENDER PLOTTER (DUAL MODE WITH ALL-DAYS AGENT VIEW) */
 function renderPlot(){
  const date=document.getElementById("scheduleDate").value||today();
  selectedDate=date;
  let agents=users.filter(u=>u.role==="agent");
 
- // AGENT LOGIN ISOLATION: Non-admin users see strictly THEIR OWN row
  if(currentUser && currentUser.role!=="admin"){
-   agents = agents.filter(u=>u.id===currentUser.id || u.username.toLowerCase()===currentUser.username.toLowerCase());
+   // NON-ADMIN (AGENT LOGIN): Render ALL dates for which this agent has uploaded schedules
+   const targetAgent = agents.find(u=>u.id===currentUser.id || u.username.toLowerCase()===currentUser.username.toLowerCase());
+   if(!targetAgent) return;
+   
+   const agentDates = getAgentScheduleDates(targetAgent.id);
+   
+   if(activePlotMode==="timeline"){
+     renderAgentAllDaysTimelineView(targetAgent, agentDates);
+   } else {
+     renderAgentAllDays15mGridView(targetAgent, agentDates);
+   }
  } else {
+   // ADMIN LOGIN: Render filtered agents for the single selected date
    const search=document.getElementById("searchAgent").value.toLowerCase();
    const agency=document.getElementById("agencyFilter").value;
    const queue=document.getElementById("queueFilter").value;
@@ -803,16 +834,85 @@ function renderPlot(){
      (!search||u.name.toLowerCase().includes(search)||u.username.toLowerCase().includes(search)) &&
      (!agency||u.agency===agency)&&(!queue||u.queue===queue)
    );
- }
 
- if(activePlotMode==="timeline"){
-   renderContinuousTimelineView(agents, date);
- } else {
-   render15mGridView(agents, date);
+   if(activePlotMode==="timeline"){
+     renderContinuousTimelineView(agents, date);
+   } else {
+     render15mGridView(agents, date);
+   }
  }
 }
 
-/* VIEW 1: CONTINUOUS 24H TIMELINE WITH DRAG FROM LEGEND & BLOCK REPOSITIONING */
+/* VIEW 1 (AGENT MODE): ALL DAYS CONTINUOUS 24H TIMELINE VIEW FOR LOGGED-IN AGENT */
+function renderAgentAllDaysTimelineView(agent, dates){
+ const labelsCol=document.getElementById("agentRowsContainer");
+ const tracksCol=document.getElementById("timelineTracksContainer");
+ labelsCol.innerHTML="";
+ tracksCol.innerHTML="";
+
+ dates.forEach(dateStr=>{
+   const lbl=document.createElement("div");
+   lbl.className="agent-row-label";
+   lbl.innerHTML=`<div class="agent-info"><div class="agent-name">📅 ${dateStr}</div>
+     <div class="agent-meta">${esc(agent.name)} • ${esc(agent.queue)}</div></div>`;
+   labelsCol.appendChild(lbl);
+
+   const track=document.createElement("div");
+   track.className="timeline-track-container";
+   
+   const bgGrid=document.createElement("div");
+   bgGrid.className="timeline-grid-overlay";
+   for(let h=0; h<24; h++){
+     const gh=document.createElement("div");
+     gh.className="grid-hour";
+     bgGrid.appendChild(gh);
+   }
+   track.appendChild(bgGrid);
+
+   const blocks=getAgentBlocks(agent.id, dateStr);
+   blocks.forEach((blk, idx)=>{
+     const blockEl=document.createElement("div");
+     const a=auxByKey(blk.auxKey);
+     blockEl.className=`aux-block ${blk.auxKey}`;
+     blockEl.style.left=blk.startMin+"px";
+     blockEl.style.width=(blk.endMin-blk.startMin)+"px";
+     blockEl.innerHTML=`<span>${a?.short||""} ${timeLabel(blk.startMin)}-${timeLabel(blk.endMin)}</span>`;
+     track.appendChild(blockEl);
+   });
+
+   tracksCol.appendChild(track);
+ });
+}
+
+/* VIEW 2 (AGENT MODE): ALL DAYS 15-MINUTE GRID VIEW FOR LOGGED-IN AGENT */
+function renderAgentAllDays15mGridView(agent, dates){
+ const container=document.getElementById("grid15mContainer");
+ container.innerHTML="";
+
+ const head=document.createElement("div");head.className="agent-head-cell";
+ head.innerHTML="<b>Date / Agent Info</b><br><small>15-Min Schedules</small>";container.appendChild(head);
+ for(let i=0;i<96;i++){
+  const h=document.createElement("div");h.className="time-head-15m";h.textContent=timeLabel15m(i);container.appendChild(h);
+ }
+
+ dates.forEach(dateStr=>{
+  const ac=document.createElement("div");ac.className="agent-row-label";
+  ac.innerHTML=`<div class="agent-info"><div class="agent-name">📅 ${dateStr}</div>
+   <div class="agent-meta">${esc(agent.name)} • ${esc(agent.queue)}</div></div>`;
+  container.appendChild(ac);
+
+  const day=get15mGridSchedule(agent.id, dateStr);
+  for(let i=0;i<96;i++){
+   const c=document.createElement("div"); const key=day[i];
+   c.className="aux-cell-15m "+(key||"empty");
+   c.textContent=key?(auxByKey(key)?.short||""):"";
+   c.title=`${timeLabel15m(i)} - ${auxByKey(key)?.label||"Unplotted"}`;
+   container.appendChild(c);
+  }
+ });
+}
+
+/* VIEW 1 (ADMIN MODE): CONTINUOUS 24H TIMELINE */
 function renderTimelineHeader(){
  const hdr=document.getElementById("timelineHeader");
  hdr.innerHTML="";
@@ -854,7 +954,6 @@ function renderContinuousTimelineView(agents, date){
    }
    track.appendChild(bgGrid);
 
-   // ALLOW DRAGGING AUX CODES FROM LEGEND DIRECTLY ONTO TRACK (ADMIN ONLY)
    if(currentUser.role==="admin"){
      track.ondragover=(e)=>e.preventDefault();
      track.ondrop=(e)=>{
@@ -936,7 +1035,7 @@ function initDragMoveBlock(e, agentId, date, blockIdx, track){
  document.addEventListener("mouseup", onMouseUp);
 }
 
-/* VIEW 2: 15-MINUTE INTERVAL GRID PLOTTER */
+/* VIEW 2 (ADMIN MODE): 15-MINUTE INTERVAL GRID PLOTTER */
 function render15mGridView(agents, date){
  const container=document.getElementById("grid15mContainer");
  container.innerHTML="";
@@ -1071,7 +1170,7 @@ function handleExcelImport(event){
        // Auto-find or create user profile
        let agent = users.find(u=>u.username.toLowerCase()===username.toLowerCase() || (u.email && u.email.toLowerCase()===username.toLowerCase()));
        if(!agent){
-         const cleanName = username.split("@")[0].replace("external-","").replace("."," ").replace(/ \w/g, l => l.toUpperCase());
+         const cleanName = username.split("@")[0].replace("external-","").replace("."," ").replace(/\w/g, l => l.toUpperCase());
          agent = {
            id: "u_" + Date.now() + "_" + Math.floor(Math.random()*1000),
            name: cleanName,
@@ -1112,7 +1211,7 @@ function handleExcelImport(event){
    populateFilters();
    renderAdmin();
    renderPlot();
-   alert(`Successfully imported ${count} schedule entries from ${file.name}! Date set to ${selectedDate}.`);
+   alert(`Successfully imported ${count} schedule entries from ${file.name}!`);
  };
  reader.readAsText(file);
 }
