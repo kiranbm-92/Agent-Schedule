@@ -1061,7 +1061,6 @@ function render15mGridView(agents, date){
    <div style="display:flex;gap:4px">
      <button class="secondary" style="padding:4px 8px;font-size:10px;font-weight:bold" onclick="copySchedule('${agent.id}')">Copy</button>
      <button class="primary" style="padding:4px 8px;font-size:10px;font-weight:bold" onclick="pasteSchedule('${agent.id}')">Paste</button>
-     <button class="danger" style="padding:4px 8px;font-size:10px;font-weight:bold;background:#dc2626" onclick="clearAgentDaySchedule('${agent.id}', '${date}')">Clear</button>
    </div>`:""}`;
   container.appendChild(ac);
 
@@ -1147,19 +1146,58 @@ function clearWholeDaySchedule(){
 
 function clearSelectedAgent(){
  if(currentUser.role!=="admin")return;
- const inputName = prompt("Enter Agent Name or Username to clear schedule for " + selectedDate + ":");
- if(!inputName) return;
- const agent = users.find(u=>u.username.toLowerCase()===inputName.trim().toLowerCase() || u.name.toLowerCase()===inputName.trim().toLowerCase());
- if(!agent) return alert("Agent not found with name/username: " + inputName);
+ const inputName = prompt("Enter Agent Name, Username, or Email to clear schedule for " + selectedDate + ":");
+ if(!inputName || !inputName.trim()) return;
+ 
+ const q = inputName.trim().toLowerCase();
+ 
+ // Robust fuzzy search matching name, username, or email
+ const agent = users.find(u => 
+   (u.username && u.username.toLowerCase() === q) || 
+   (u.email && u.email.toLowerCase() === q) || 
+   (u.name && u.name.toLowerCase() === q) ||
+   (u.username && u.username.toLowerCase().includes(q)) || 
+   (u.email && u.email.toLowerCase().includes(q)) || 
+   (u.name && u.name.toLowerCase().includes(q))
+ );
+ 
+ if(!agent) {
+   // Secondary search: check if any stored schedule key matches the username/email string
+   let foundId = null;
+   Object.keys(continuousSchedules).concat(Object.keys(grid15mSchedules)).forEach(k => {
+     if(k.toLowerCase().includes(q)){
+       const parts = k.split("_");
+       foundId = parts.slice(1).join("_");
+     }
+   });
+   if(foundId){
+     clearAgentDaySchedule(foundId, selectedDate);
+     return;
+   }
+   return alert("Agent not found with name/email: '" + inputName + "'. Please check the spelling or select from the list.");
+ }
  
  clearAgentDaySchedule(agent.id, selectedDate);
 }
 
 function clearAgentDaySchedule(agentId, dateStr){
  if(currentUser.role!=="admin")return;
- const agent = users.find(u=>u.id===agentId);
+ const agent = users.find(u=>u.id===agentId || u.username===agentId || u.email===agentId);
+ 
+ // Clear both continuous timeline and 15m grid schedules
  continuousSchedules[dayKey(dateStr, agentId)] = [];
  grid15mSchedules[dayKey(dateStr, agentId)] = Array(96).fill("");
+ 
+ // If agent object exists under different ID format
+ if(agent){
+   continuousSchedules[dayKey(dateStr, agent.id)] = [];
+   grid15mSchedules[dayKey(dateStr, agent.id)] = Array(96).fill("");
+   if(agent.username){
+     continuousSchedules[dayKey(dateStr, agent.username)] = [];
+     grid15mSchedules[dayKey(dateStr, agent.username)] = Array(96).fill("");
+   }
+ }
+ 
  saveAll();
  renderPlot();
  alert(`Cleared schedule for ${agent?.name || 'Agent'} on ${dateStr}.`);
