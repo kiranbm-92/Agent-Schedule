@@ -262,25 +262,28 @@ border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,0.15);padding:10px;z-index:
   <section id="plotSection">
     <div class="toolbar">
       <input id="scheduleDate" type="date" onchange="renderPlot()">
-      <input id="searchAgent" placeholder="Search agent..." oninput="renderPlot()">
-      <select id="agencyFilter" onchange="renderPlot()"><option value="">All Agencies</option></select>
-      <select id="queueFilter" onchange="renderPlot()"><option value="">All Queues</option></select>
       
-      <!-- PLOTTER VIEW MODE TOGGLE -->
-      <select id="plotModeSelect" onchange="switchPlotMode()" style="font-weight:700;border:1px solid #2563eb;color:#2563eb">
+      <!-- ADMIN-ONLY CONTROLS -->
+      <input id="searchAgent" class="adminOnly" placeholder="Search agent..." oninput="renderPlot()">
+      <select id="agencyFilter" class="adminOnly" onchange="renderPlot()"><option value="">All Agencies</option></select>
+      <select id="queueFilter" class="adminOnly" onchange="renderPlot()"><option value="">All Queues</option></select>
+      
+      <select id="plotModeSelect" class="adminOnly" onchange="switchPlotMode()" style="font-weight:700;border:1px solid #2563eb;color:#2563eb">
         <option value="timeline">24-Hour Continuous Timeline View</option>
         <option value="grid15m">15-Minute Grid Interval Plotter View</option>
       </select>
 
       <input type="file" id="excelFileInput" accept=".xlsx, .xls, .csv" class="hidden" onchange="handleExcelImport(event)">
+      <button class="secondary adminOnly" onclick="downloadSampleTemplate()">📥 Download Sample Template (.csv)</button>
       <button class="secondary adminOnly" onclick="document.getElementById('excelFileInput').click()">📤 Import Excel/CSV</button>
       <button class="primary adminOnly" onclick="addAgent()">+ Add Agent</button>
       <button class="secondary adminOnly" onclick="clearSelectedAgent()">Clear Selected Day</button>
       <button class="secondary adminOnly" onclick="saveSchedules()">Save Schedule</button>
-      <button class="secondary" onclick="exportCSV()">Export AUX CSV</button>
+      <button class="secondary adminOnly" onclick="exportCSV()">Export AUX CSV</button>
     </div>
 
-    <div class="card">
+    <!-- ADMIN-ONLY LEGEND & INSTRUCTIONS BOX -->
+    <div class="card adminOnly">
       <b>Schedule Plotter Tools:</b>
       <div id="modeInstructionText" style="font-size:12px;color:#667085;margin-top:4px">
         • <b>Drag from Legend:</b> Drag any AUX code onto the 24-hour timeline to create a block.<br>
@@ -290,7 +293,6 @@ border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,0.15);padding:10px;z-index:
         • <b>Excel:</b> Upload multiple agents/dates/AUX rows using the sample template. Existing schedules for the uploaded date/agent are replaced by the imported rows.
       </div>
       
-      <!-- FULL LEGEND INCLUDES ALL WORK & LEAVE AUX CODES -->
       <div style="font-size:12px;font-weight:700;margin-top:10px">Work & Leave AUX Codes (Drag or click to plot):</div>
       <div class="legend" id="legend" style="margin-top:6px"></div>
     </div>
@@ -764,18 +766,24 @@ function timeLabel15m(i){
  return String(h).padStart(2,"0")+":"+String(m).padStart(2,"0");
 }
 
-/* RENDER PLOTTER (DUAL MODE) */
+/* RENDER PLOTTER (DUAL MODE WITH AGENT ISOLATION) */
 function renderPlot(){
  const date=document.getElementById("scheduleDate").value||today();
  selectedDate=date;
  let agents=users.filter(u=>u.role==="agent");
- const search=document.getElementById("searchAgent").value.toLowerCase();
- const agency=document.getElementById("agencyFilter").value;
- const queue=document.getElementById("queueFilter").value;
- agents=agents.filter(u=>
-   (!search||u.name.toLowerCase().includes(search)||u.username.toLowerCase().includes(search)) &&
-   (!agency||u.agency===agency)&&(!queue||u.queue===queue)
- );
+
+ // AGENT LOGIN ISOLATION: Non-admin users see strictly THEIR OWN row
+ if(currentUser && currentUser.role!=="admin"){
+   agents = agents.filter(u=>u.id===currentUser.id || u.username===currentUser.username);
+ } else {
+   const search=document.getElementById("searchAgent").value.toLowerCase();
+   const agency=document.getElementById("agencyFilter").value;
+   const queue=document.getElementById("queueFilter").value;
+   agents=agents.filter(u=>
+     (!search||u.name.toLowerCase().includes(search)||u.username.toLowerCase().includes(search)) &&
+     (!agency||u.agency===agency)&&(!queue||u.queue===queue)
+   );
+ }
 
  if(activePlotMode==="timeline"){
    renderContinuousTimelineView(agents, date);
@@ -826,7 +834,7 @@ function renderContinuousTimelineView(agents, date){
    }
    track.appendChild(bgGrid);
 
-   // ALLOW DRAGGING AUX CODES FROM LEGEND DIRECTLY ONTO TRACK
+   // ALLOW DRAGGING AUX CODES FROM LEGEND DIRECTLY ONTO TRACK (ADMIN ONLY)
    if(currentUser.role==="admin"){
      track.ondragover=(e)=>e.preventDefault();
      track.ondrop=(e)=>{
@@ -835,7 +843,6 @@ function renderContinuousTimelineView(agents, date){
        if(auxKey){
          const rect=track.getBoundingClientRect();
          const dropX=Math.max(0, Math.min(1439, Math.floor(e.clientX - rect.left)));
-         // Snap to 15-min intervals (15px)
          const snappedStart=Math.floor(dropX/15)*15;
          const blocks=getAgentBlocks(agent.id, date);
          blocks.push({auxKey, startMin: snappedStart, endMin: Math.min(1440, snappedStart+60)});
@@ -856,14 +863,12 @@ function renderContinuousTimelineView(agents, date){
       ${currentUser.role==="admin"?`<span class="delete-btn" title="Delete AUX Block" onclick="deleteAuxBlock(event, '${agent.id}', '${date}', ${idx})">✕</span>`:""}`;
      
      if(currentUser.role==="admin"){
-       // DRAG REPOSITION AUX BLOCK WITH 15-MINUTE SNAPPING
        blockEl.onmousedown=(e)=>{
          if(e.target.classList.contains("delete-btn")) return;
          e.stopPropagation();
          initDragMoveBlock(e, agent.id, date, idx, track);
        };
 
-       // Right-click to delete AUX block
        blockEl.oncontextmenu=(e)=>{
          e.preventDefault();
          deleteAuxBlock(e, agent.id, date, idx);
@@ -895,7 +900,6 @@ function initDragMoveBlock(e, agentId, date, blockIdx, track){
  function onMouseMove(me){
    const deltaX = Math.floor(me.clientX - startMouseX);
    let newStart = Math.max(0, Math.min(1440 - duration, origStartMin + deltaX));
-   // Snap movement to 15-minute intervals
    newStart = Math.round(newStart / 15) * 15;
    target.startMin = newStart;
    target.endMin = newStart + duration;
@@ -1011,6 +1015,18 @@ function clearSelectedAgent(){
 }
 function saveSchedules(){saveAll();alert("Schedules saved in browser.");}
 
+/* DOWNLOAD SAMPLE CSV TEMPLATE FOR ADMINS */
+function downloadSampleTemplate(){
+ const sampleContent = "Date,Username,AUX_Code,Start_Time,End Time\n2026-09-01,agent001,Available,08:00,12:00\n2026-09-01,agent001,Lunch,12:00,13:00\n2026-09-01,agent001,Available,13:00,17:00\n2026-09-01,agent002,Planned Leave,00:00,23:59";
+ const blob = new Blob([sampleContent], {type: "text/csv;charset=utf-8"});
+ const url = URL.createObjectURL(blob);
+ const a = document.createElement("a");
+ a.href = url;
+ a.download = "WFM_Schedule_Upload_Template.csv";
+ a.click();
+ URL.revokeObjectURL(url);
+}
+
 /* EXCEL / CSV BULK IMPORT PARSER */
 function handleExcelImport(event){
  const file=event.target.files[0];
@@ -1023,7 +1039,7 @@ function handleExcelImport(event){
    let count=0;
    
    lines.forEach((line, idx)=>{
-     if(idx===0 || !line.trim()) return; // Skip header
+     if(idx===0 || !line.trim()) return;
      const cols=line.split(",").map(c=>c.replace(/^["']|["']$/g,"").trim());
      if(cols.length>=4){
        const [date, username, auxLabel, startTime, endTime]=cols;
