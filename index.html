@@ -381,6 +381,7 @@ border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,0.15);padding:10px;z-index:
 </section>
 
 <script>
+
 /* ==========================================================
    WFM SCHEDULE PLOTTER - FULL AUX DEFINITIONS & SEPARATION
    ========================================================== */
@@ -1323,7 +1324,7 @@ function exportCSV(){
   const logs=auxLogs[date+"_"+a.id]||[];
   logs.forEach(l=>{
     const aux=auxByKey(l.auxKey);
-    lines.push([date,a.name,a.username,a.agency,a.unit,a.queue,aux?.label,l.startTime,l.endTime,l.durationSec].map(csv).join(","));
+    lines.push([date,a.name,a.username,a.agency,a.unit,a.queue,aux?.label||l.auxKey,l.startTime,l.endTime,l.durationSec].map(csv).join(","));
   });
  });
  const blob=new Blob([lines.join("\n")],{type:"text/csv;charset=utf-8"});
@@ -1391,6 +1392,7 @@ function esc(v){return String(v??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&l
 document.getElementById("scheduleDate").value=today();
 document.getElementById("reportDate").value=today();
 document.getElementById("historyDate").value=today();
+
 </script>
 </body>
 </html>
