@@ -129,7 +129,7 @@ border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,0.15);padding:10px;z-index:
   <div class="login-card">
     <h1>WFM Schedule Plotter</h1>
     <p>Sign in with your assigned account credentials.</p>
-    <div class="field"><label>Username</label><input id="loginUser" placeholder="e.g. agent001 or wfm.admin"></div>
+    <div class="field"><label>Email / Username</label><input id="loginUser" placeholder="Enter your email or username"></div>
     <div class="field">
       <label>Password</label>
       <input id="loginPass" type="password" placeholder="Enter password">
@@ -137,10 +137,6 @@ border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,0.15);padding:10px;z-index:
     </div>
     <button class="primary" style="width:100%" onclick="login()">Sign In</button>
     <div id="loginError" class="login-error"></div>
-    <div style="margin-top:18px;font-size:11px;color:#667085">
-      Admin Login: <b>wfm@coindcx.com / Admin@007</b><br>
-      Agent Login: <b>[Any Agent Email] / CoinDCX@135</b>
-    </div>
   </div>
 </section>
 
@@ -1173,7 +1169,15 @@ function saveSchedules(){saveAll();alert("Schedules saved in browser.");}
 
 /* DOWNLOAD SAMPLE CSV TEMPLATE FOR ADMINS */
 function downloadSampleTemplate(){
- const sampleContent = "Date,Username,AUX_Code,Start_Time,End Time\n9/1/26,external-syed.pasha@coindcx.com,Available,07:00,16:00\n9/1/26,external-pritam.kumar@coindcx.com,Available,15:00,00:00\n9/1/26,external-bibekananda.bariki@coindcx.com,Week Off,07:00,16:00\n9/1/26,external-nawaz.p@coindcx.com,Planned Leave,15:00,00:00\n9/1/26,external-mohammed.roshan@coindcx.com,Comp Off,23:00,08:00";
+ const sampleLines = [
+   "Date,Username,AUX_Code,Start_Time,End Time",
+   "9/1/26,external-syed.pasha@coindcx.com,Available,07:00,16:00",
+   "9/1/26,external-pritam.kumar@coindcx.com,Available,15:00,00:00",
+   "9/1/26,external-bibekananda.bariki@coindcx.com,Week Off,07:00,16:00",
+   "9/1/26,external-nawaz.p@coindcx.com,Planned Leave,15:00,00:00",
+   "9/1/26,external-mohammed.roshan@coindcx.com,Comp Off,23:00,08:00"
+ ];
+ const sampleContent = sampleLines.join("\n");
  const blob = new Blob([sampleContent], {type: "text/csv;charset=utf-8"});
  const url = URL.createObjectURL(blob);
  const a = document.createElement("a");
@@ -1191,9 +1195,7 @@ function handleExcelImport(event){
  const reader=new FileReader();
  reader.onload=function(e){
    const text=e.target.result;
-   const lines=text.split(/
-?
-/);
+   const lines=text.split(/\r?\n/);
    let count=0;
    
    lines.forEach((line, idx)=>{
@@ -1203,19 +1205,17 @@ function handleExcelImport(event){
        let [rawDate, username, auxLabel, startTime, endTime]=cols;
        if(!username) return;
 
-       // Normalize Date to YYYY-MM-DD
        const normDate = normalizeDateStr(rawDate);
 
-       // Auto-find or create user profile with unique default password
        let agent = users.find(u=>u.username.toLowerCase()===username.toLowerCase() || (u.email && u.email.toLowerCase()===username.toLowerCase()));
        if(!agent){
-         const cleanName = username.split("@")[0].replace("external-","").replace("."," ").replace(/\w/g, l => l.toUpperCase());
+         const cleanName = username.split("@")[0].replace("external-","").replace("."," ").replace(/\b\w/g, l => l.toUpperCase());
          agent = {
            id: "u_" + Date.now() + "_" + Math.floor(Math.random()*1000),
            name: cleanName,
            username: username,
            email: username.includes("@")?username:username+"@coindcx.com",
-           password: "Agent@123", // Admin created default unique password
+           password: "Agent@123",
            role: "agent",
            agency: "External",
            unit: "Support",
@@ -1237,7 +1237,6 @@ function handleExcelImport(event){
            const startMin = (sH*60)+sM;
            let endMin = (eH*60)+eM;
            
-           // Midnight / Overnight Shift Handling
            if(endMin <= startMin && endMin === 0) endMin = 1440;
 
            continuousSchedules[key].push({auxKey: aux.key, startMin, endMin});
