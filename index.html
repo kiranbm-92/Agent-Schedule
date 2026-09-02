@@ -582,7 +582,23 @@ function initializeAppView(){
  document.getElementById("reportDate").value=selectedDate;
  document.getElementById("historyDate").value=selectedDate;
  
- changeActiveAux("unavailable");
+ // Restore ongoing running AUX status & start time on refresh, or default to Unavailable
+ const savedAuxStateStr = localStorage.getItem("wfm_user_aux_state_" + currentUser.id);
+ if(savedAuxStateStr){
+   try {
+     const savedAuxState = JSON.parse(savedAuxStateStr);
+     if(savedAuxState && savedAuxState.auxKey){
+       changeActiveAux(savedAuxState.auxKey, savedAuxState.startTime);
+     } else {
+       changeActiveAux("unavailable");
+     }
+   } catch(e){
+     changeActiveAux("unavailable");
+   }
+ } else {
+   changeActiveAux("unavailable");
+ }
+
  applyPermissions();
  populateFilters();
  renderLegend();
@@ -755,25 +771,31 @@ function renderAuxDropdownList(items){
  });
 }
 
-function changeActiveAux(key){
- const now=Date.now();
- if(currentUser && currentActiveAux){
-   const elapsed=(now-auxStartTime)/1000;
+function changeActiveAux(key, preservedStartTime){
+ const now = Date.now();
+ if(currentUser && currentActiveAux && !preservedStartTime){
+   const elapsed = (now - auxStartTime) / 1000;
    logAuxSession(currentUser.id, today(), currentActiveAux, auxStartTime, now, elapsed);
  }
 
- currentActiveAux=key;
- auxStartTime=now;
+ currentActiveAux = key;
+ auxStartTime = preservedStartTime || now;
  
  if(currentUser){
+   // Persist active user AUX state across page refreshes
+   localStorage.setItem("wfm_user_aux_state_" + currentUser.id, JSON.stringify({
+     auxKey: key,
+     startTime: auxStartTime
+   }));
+
    let liveStatus = JSON.parse(localStorage.getItem("wfm_live_agent_status") || "{}");
-   liveStatus[currentUser.id] = { auxKey: key, startTime: now, userRole: currentUser.role };
+   liveStatus[currentUser.id] = { auxKey: key, startTime: auxStartTime, userRole: currentUser.role };
    localStorage.setItem("wfm_live_agent_status", JSON.stringify(liveStatus));
  }
 
- const a=auxByKey(key);
- document.getElementById("pillDot").style.background=a?.color||"#ef4444";
- document.getElementById("pillText").textContent=a?.label||"Unavailable";
+ const a = auxByKey(key);
+ document.getElementById("pillDot").style.background = a?.color || "#ef4444";
+ document.getElementById("pillText").textContent = a?.label || "Unavailable";
  updateLiveTimer();
  renderAgentHistory();
 }
@@ -1768,10 +1790,27 @@ function exportCSV(){
 }
 
 function logout(){
+ const now = Date.now();
+ if(currentUser){
+   // Stop and log the active AUX session up to the exact moment of logout
+   if(currentActiveAux){
+     const elapsed = (now - auxStartTime) / 1000;
+     logAuxSession(currentUser.id, today(), currentActiveAux, auxStartTime, now, elapsed);
+   }
+
+   // Update live status for Admin Dashboard so agent shows Offline
+   let liveStatus = JSON.parse(localStorage.getItem("wfm_live_agent_status") || "{}");
+   liveStatus[currentUser.id] = { auxKey: "offline", startTime: now, userRole: currentUser.role };
+   localStorage.setItem("wfm_live_agent_status", JSON.stringify(liveStatus));
+
+   // Clear active user running AUX state so timer stops completely on logout
+   localStorage.removeItem("wfm_user_aux_state_" + currentUser.id);
+ }
+
  localStorage.removeItem("wfm_current_user_id");
  sessionStorage.removeItem("wfm_current_user");
- currentUser=null;
- if(timerInterval)clearInterval(timerInterval);
+ currentUser = null;
+ if(timerInterval) clearInterval(timerInterval);
  document.getElementById("app").classList.add("hidden");
  document.getElementById("loginScreen").classList.remove("hidden");
 }
