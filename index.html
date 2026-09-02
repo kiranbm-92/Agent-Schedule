@@ -435,7 +435,8 @@ let continuousSchedules = JSON.parse(localStorage.getItem("wfm_continuous_schedu
 let grid15mSchedules = JSON.parse(localStorage.getItem("wfm_grid15m_schedules") || "{}");
 let auxLogs = JSON.parse(localStorage.getItem("wfm_aux_logs") || "{}");
 
-let currentUser = null;
+let storedUserId = localStorage.getItem("wfm_active_user_id");
+let currentUser = storedUserId ? users.find(u => u.id === storedUserId) : null;
 let selectedAux = "available";
 let selectedDate = today();
 let timerInterval = null;
@@ -461,6 +462,32 @@ function saveAll(){
  localStorage.setItem("wfm_continuous_schedules",JSON.stringify(continuousSchedules));
  localStorage.setItem("wfm_grid15m_schedules",JSON.stringify(grid15mSchedules));
  localStorage.setItem("wfm_aux_logs",JSON.stringify(auxLogs));
+ if(currentUser){
+   localStorage.setItem("wfm_active_user_id", currentUser.id);
+   localStorage.setItem("wfm_live_aux_" + currentUser.id, JSON.stringify({
+     auxKey: currentActiveAux,
+     startTime: auxStartTime
+   }));
+ }
+}
+
+function restoreLiveAuxState(){
+ if(!currentUser) return;
+ const savedAux = localStorage.getItem("wfm_live_aux_" + currentUser.id);
+ if(savedAux){
+   try {
+     const parsed = JSON.parse(savedAux);
+     if(parsed.auxKey && parsed.startTime){
+       currentActiveAux = parsed.auxKey;
+       auxStartTime = parsed.startTime;
+     }
+   } catch(e){
+     console.error("Error restoring AUX state:", e);
+   }
+ } else {
+   currentActiveAux = "available";
+   auxStartTime = Date.now();
+ }
 }
 
 document.addEventListener("mousedown",()=>isMouseDown=true);
@@ -522,14 +549,14 @@ function login(){
  }
 
  currentUser = found;
- sessionStorage.setItem("wfm_current_user", currentUser.id);
+ localStorage.setItem("wfm_active_user_id", currentUser.id);
 
  if(currentUser.requirePasswordReset){
    document.getElementById("forceChangeModal").classList.remove("hidden");
    return;
  }
 
- initializeAppView();
+ initializeAppView(false);
 }
 
 function submitFirstLoginChange(){
@@ -546,7 +573,7 @@ function submitFirstLoginChange(){
  initializeAppView();
 }
 
-function initializeAppView(){
+function initializeAppView(isRestore = false){
  document.getElementById("loginScreen").classList.add("hidden");
  document.getElementById("app").classList.remove("hidden");
  document.getElementById("roleBadge").textContent=currentUser.role.toUpperCase();
@@ -555,7 +582,15 @@ function initializeAppView(){
  document.getElementById("reportDate").value=selectedDate;
  document.getElementById("historyDate").value=selectedDate;
  
- changeActiveAux("available");
+ if(isRestore){
+   restoreLiveAuxState();
+   const a = auxByKey(currentActiveAux);
+   document.getElementById("pillDot").style.background = a?.color || "#22c55e";
+   document.getElementById("pillText").textContent = a?.label || "Available";
+ } else {
+   changeActiveAux("available");
+ }
+
  applyPermissions();
  populateFilters();
  renderLegend();
@@ -732,11 +767,15 @@ function changeActiveAux(key){
  const now=Date.now();
  if(currentUser && currentActiveAux){
    const elapsed=(now-auxStartTime)/1000;
-   logAuxSession(currentUser.id, today(), currentActiveAux, auxStartTime, now, elapsed);
+   if(elapsed > 0){
+     logAuxSession(currentUser.id, today(), currentActiveAux, auxStartTime, now, elapsed);
+   }
  }
 
  currentActiveAux=key;
  auxStartTime=now;
+ saveAll();
+
  const a=auxByKey(key);
  document.getElementById("pillDot").style.background=a?.color||"#22c55e";
  document.getElementById("pillText").textContent=a?.label||"Available";
@@ -1569,7 +1608,15 @@ function exportCSV(){
 }
 
 function logout(){
- sessionStorage.removeItem("wfm_current_user");
+ if(currentUser && currentActiveAux){
+   const now = Date.now();
+   const elapsed = (now - auxStartTime) / 1000;
+   if(elapsed > 0){
+     logAuxSession(currentUser.id, today(), currentActiveAux, auxStartTime, now, elapsed);
+   }
+ }
+
+ localStorage.removeItem("wfm_active_user_id");
  currentUser=null;
  if(timerInterval)clearInterval(timerInterval);
  document.getElementById("app").classList.add("hidden");
@@ -1629,6 +1676,10 @@ document.getElementById("scheduleDate").value=today();
 document.getElementById("reportDate").value=today();
 document.getElementById("historyDate").value=today();
 
+// Auto-restore session on page refresh or force reload
+if(currentUser){
+ initializeAppView(true);
+}
 
 </script>
 </body>
