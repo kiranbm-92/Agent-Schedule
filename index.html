@@ -113,8 +113,8 @@ border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,0.15);padding:10px;z-index:
 .agent-panel{display:grid;grid-template-columns:2fr 1fr;gap:14px}
 .current-status{display:flex;align-items:center;justify-content:space-between;padding:18px;border-radius:12px;background:#f8fafc}
 .status-code{font-size:28px;font-weight:900}.status-timer{font-size:30px;font-weight:900;font-variant-numeric:tabular-nums}
-.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.kpi{padding:14px;border:1px solid var(--border);border-radius:10px;transition:all 0.3s ease}
-.kpi b{display:block;font-size:20px}.kpi small{color:inherit;font-weight:bold}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.kpi{padding:14px;border:1px solid var(--border);border-radius:10px}
+.kpi b{display:block;font-size:20px}.kpi small{color:var(--muted)}
 .summary-table{width:100%;border-collapse:collapse}.summary-table th,.summary-table td{padding:9px;border-bottom:1px solid var(--border);text-align:left;font-size:13px}
 
 /* Admin & Tables */
@@ -376,7 +376,7 @@ border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,0.15);padding:10px;z-index:
     <div class="card">
       <h3>Agent & Credential Management</h3>
       <div class="table-scroll"><table class="data-table"><thead><tr>
-        <th>Name</th><th>Username</th><th>Email</th><th>Agency</th><th>Unit</th><th>Queue</th><th>Shift</th><th>Role</th><th>Action</th>
+        <th>Name</th><th>Username</th><th>Email</th><th>Agency</th><th>Department</th><th>Queue</th><th>Shift</th><th>Role</th><th>Action</th>
       </tr></thead><tbody id="adminBody"></tbody></table></div>
     </div>
   </section>
@@ -422,6 +422,11 @@ const LEAVE_SCHEDULE_AUX = [
 // Combine all AUX codes for Schedule Plotter lookup and rendering
 const ALL_AUX = [...LIVE_DROPDOWN_AUX, ...LEAVE_SCHEDULE_AUX];
 
+const AGENCY_OPTIONS = ["internal", "external", "Radical Minds", "Concentrix", "CoinDCX"];
+const DEPARTMENT_OPTIONS = ["WFM", "CS Delivery", "Quality", "Training", "Process Excellence"];
+const QUEUE_OPTIONS = ["Livechat", "Email", "Calling Sales", "Onboarding Ops", "Verifiers/Auditors"];
+const ROLE_OPTIONS = ["Agent", "SME", "Team Lead", "QA", "Trainer", "admin"];
+
 const defaultUsers = [
  {id:"u1",name:"WFM Admin",username:"wfm@coindcx.com",email:"wfm@coindcx.com",password:"Admin@007",role:"admin",agency:"Internal",unit:"WFM",queue:"All",shift:"09:00-18:00",requirePasswordReset:false},
  {id:"u2",name:"Rahul Sharma",username:"agent001",email:"agent001@company.com",password:"Agent@123",role:"agent",agency:"RM",unit:"Support",queue:"Live Chat",shift:"08:00-17:00",requirePasswordReset:false},
@@ -446,7 +451,7 @@ let isMouseDown = false;
 let copiedScheduleBuffer = null;
 
 // Live AUX State Tracker
-let currentActiveAux = "unavailable";
+let currentActiveAux = "available";
 let auxStartTime = Date.now();
 
 // Double Click Modal Plotting State
@@ -522,8 +527,7 @@ function login(){
  }
 
  currentUser = found;
- localStorage.setItem("wfm_current_user_id", currentUser.id);
- sessionStorage.setItem("wfm_current_user", currentUser.id);
+ localStorage.setItem("wfm_current_user_id", currentUser.id); sessionStorage.setItem("wfm_current_user", currentUser.id);
 
  if(currentUser.requirePasswordReset){
    document.getElementById("forceChangeModal").classList.remove("hidden");
@@ -1539,13 +1543,103 @@ function renderDashboard(){
  document.getElementById("dashboardBody").innerHTML=rows;
 }
 
+
+function getAgentDynamicShifts(user){
+ const shiftsSet = new Set();
+ if(user && user.shift && user.shift !== "Shift N/A"){
+   shiftsSet.add(user.shift);
+ }
+ 
+ Object.keys(continuousSchedules).forEach(key => {
+   if(key.endsWith("_" + user.id) || key.endsWith("_" + user.username)){
+     const blocks = continuousSchedules[key];
+     if(blocks && blocks.length > 0){
+       let minStart = 1440, maxEnd = 0;
+       blocks.forEach(b => {
+         if(b.startMin < minStart) minStart = b.startMin;
+         if(b.endMin > maxEnd) maxEnd = b.endMin;
+       });
+       if(minStart < maxEnd){
+         const sStr = timeLabel(minStart);
+         const eStr = (maxEnd === 1440) ? "00:00" : timeLabel(maxEnd);
+         shiftsSet.add(`${sStr}-${eStr}`);
+       }
+     }
+   }
+ });
+ 
+ const defaultShifts = ["07:00-16:00", "08:00-17:00", "09:00-18:00", "11:00-20:00", "15:00-00:00", "23:00-08:00"];
+ defaultShifts.forEach(s => shiftsSet.add(s));
+ return Array.from(shiftsSet);
+}
+
+function updateAdminUserField(userId, fieldName, newValue){
+ const user = users.find(u => u.id === userId);
+ if(user){
+   user[fieldName] = newValue;
+   if(fieldName === "department") user.unit = newValue;
+   if(fieldName === "unit") user.department = newValue;
+   saveAll();
+   populateFilters();
+   renderPlot();
+   renderDashboard();
+ }
+}
+
 function renderAdmin(){
  if(!currentUser||currentUser.role!=="admin")return;
- document.getElementById("adminBody").innerHTML=users.map(u=>`<tr>
- <td>${esc(u.name)}</td><td>${esc(u.username)}</td><td>${esc(u.email||"-")}</td><td>${esc(u.agency)}</td><td>${esc(u.unit)}</td>
- <td>${esc(u.queue)}</td><td>${esc(u.shift)}</td><td>${esc(u.role)}</td>
- <td>${u.role==="agent"?`<button class="danger" onclick="deleteAgent('${u.id}')">Delete</button> <button class="action" onclick="editPassword('${u.id}')">Set Password</button>`:""}</td></tr>`).join("");
+ document.getElementById("adminBody").innerHTML=users.map(u=>{
+  const currAgency = u.agency || "internal";
+  const currDept = u.department || u.unit || "WFM";
+  const currQueue = u.queue || "Livechat";
+  const currShift = u.shift || "09:00-18:00";
+  const currRole = u.role || "Agent";
+
+  // Agency Dropdown
+  let agencyOpts = AGENCY_OPTIONS.map(opt => `<option value="${esc(opt)}" ${opt.toLowerCase()===currAgency.toLowerCase()?'selected':''}>${esc(opt)}</option>`).join("");
+  if(!AGENCY_OPTIONS.some(opt => opt.toLowerCase() === currAgency.toLowerCase())){
+    agencyOpts += `<option value="${esc(currAgency)}" selected>${esc(currAgency)}</option>`;
+  }
+
+  // Department Dropdown
+  let deptOpts = DEPARTMENT_OPTIONS.map(opt => `<option value="${esc(opt)}" ${opt.toLowerCase()===currDept.toLowerCase()?'selected':''}>${esc(opt)}</option>`).join("");
+  if(!DEPARTMENT_OPTIONS.some(opt => opt.toLowerCase() === currDept.toLowerCase())){
+    deptOpts += `<option value="${esc(currDept)}" selected>${esc(currDept)}</option>`;
+  }
+
+  // Queue Dropdown
+  let queueOpts = QUEUE_OPTIONS.map(opt => `<option value="${esc(opt)}" ${opt.toLowerCase()===currQueue.toLowerCase()?'selected':''}>${esc(opt)}</option>`).join("");
+  if(!QUEUE_OPTIONS.some(opt => opt.toLowerCase() === currQueue.toLowerCase())){
+    queueOpts += `<option value="${esc(currQueue)}" selected>${esc(currQueue)}</option>`;
+  }
+
+  // Dynamic Shift Dropdown
+  const availableShifts = getAgentDynamicShifts(u);
+  let shiftOpts = availableShifts.map(opt => `<option value="${esc(opt)}" ${opt.toLowerCase()===currShift.toLowerCase()?'selected':''}>${esc(opt)}</option>`).join("");
+  if(!availableShifts.some(opt => opt.toLowerCase() === currShift.toLowerCase())){
+    shiftOpts += `<option value="${esc(currShift)}" selected>${esc(currShift)}</option>`;
+  }
+
+  // Role Dropdown
+  let roleOpts = ROLE_OPTIONS.map(opt => `<option value="${esc(opt)}" ${opt.toLowerCase()===currRole.toLowerCase()?'selected':''}>${esc(opt)}</option>`).join("");
+  if(!ROLE_OPTIONS.some(opt => opt.toLowerCase() === currRole.toLowerCase())){
+    roleOpts += `<option value="${esc(currRole)}" selected>${esc(currRole)}</option>`;
+  }
+
+  return `<tr>
+    <td><b>${esc(u.name)}</b></td>
+    <td>${esc(u.username)}</td>
+    <td>${esc(u.email||"-")}</td>
+    <td><select style="padding:4px 8px;border-radius:6px;border:1px solid #cbd5e1;font-weight:600" onchange="updateAdminUserField('${u.id}', 'agency', this.value)">${agencyOpts}</select></td>
+    <td><select style="padding:4px 8px;border-radius:6px;border:1px solid #cbd5e1;font-weight:600" onchange="updateAdminUserField('${u.id}', 'department', this.value)">${deptOpts}</select></td>
+    <td><select style="padding:4px 8px;border-radius:6px;border:1px solid #cbd5e1;font-weight:600" onchange="updateAdminUserField('${u.id}', 'queue', this.value)">${queueOpts}</select></td>
+    <td><select style="padding:4px 8px;border-radius:6px;border:1px solid #cbd5e1;font-weight:600" onchange="updateAdminUserField('${u.id}', 'shift', this.value)">${shiftOpts}</select></td>
+    <td><select style="padding:4px 8px;border-radius:6px;border:1px solid #cbd5e1;font-weight:600" onchange="updateAdminUserField('${u.id}', 'role', this.value)">${roleOpts}</select></td>
+    <td><button class="danger" style="padding:4px 10px;font-size:11px" onclick="deleteAgent('${u.id}')">Delete</button> <button class="secondary" style="padding:4px 10px;font-size:11px" onclick="editPassword('${u.id}')">Password</button></td>
+  </tr>`;
+ }).join("");
 }
+
 
 function editPassword(id){
  const user=users.find(u=>u.id===id);
