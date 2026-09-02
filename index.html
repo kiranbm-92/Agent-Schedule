@@ -93,6 +93,7 @@ border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,0.15);padding:10px;z-index:
 .aux-cell-15m:hover{outline:2px solid #111;outline-offset:-2px}
 
 /* AUX Colors */
+.unavailable{background:#ef4444;color:#fff}
 .available{background:#22c55e;color:#063b19}.break{background:#3b82f6;color:#fff}
 .lunch{background:#f59e0b;color:#421f00}.bio{background:#06b6d4;color:#00323b}
 .breakpending{background:#fde047;color:#3f3000}.meeting{background:#a855f7;color:#fff}
@@ -391,6 +392,7 @@ border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,0.15);padding:10px;z-index:
 
 // 1. LIVE DROPDOWN AUX CODES (Active Agent Operational States)
 const LIVE_DROPDOWN_AUX = [
+ {key:"unavailable", label:"Unavailable", short:"UN", color:"#ef4444"},
  {key:"available", label:"Available", short:"AV", color:"#22c55e"},
  {key:"break", label:"Break", short:"BR", color:"#3b82f6"},
  {key:"lunch", label:"Lunch", short:"LU", color:"#f59e0b"},
@@ -435,8 +437,7 @@ let continuousSchedules = JSON.parse(localStorage.getItem("wfm_continuous_schedu
 let grid15mSchedules = JSON.parse(localStorage.getItem("wfm_grid15m_schedules") || "{}");
 let auxLogs = JSON.parse(localStorage.getItem("wfm_aux_logs") || "{}");
 
-let storedUserId = localStorage.getItem("wfm_active_user_id");
-let currentUser = storedUserId ? users.find(u => u.id === storedUserId) : null;
+let currentUser = null;
 let selectedAux = "available";
 let selectedDate = today();
 let timerInterval = null;
@@ -462,32 +463,6 @@ function saveAll(){
  localStorage.setItem("wfm_continuous_schedules",JSON.stringify(continuousSchedules));
  localStorage.setItem("wfm_grid15m_schedules",JSON.stringify(grid15mSchedules));
  localStorage.setItem("wfm_aux_logs",JSON.stringify(auxLogs));
- if(currentUser){
-   localStorage.setItem("wfm_active_user_id", currentUser.id);
-   localStorage.setItem("wfm_live_aux_" + currentUser.id, JSON.stringify({
-     auxKey: currentActiveAux,
-     startTime: auxStartTime
-   }));
- }
-}
-
-function restoreLiveAuxState(){
- if(!currentUser) return;
- const savedAux = localStorage.getItem("wfm_live_aux_" + currentUser.id);
- if(savedAux){
-   try {
-     const parsed = JSON.parse(savedAux);
-     if(parsed.auxKey && parsed.startTime){
-       currentActiveAux = parsed.auxKey;
-       auxStartTime = parsed.startTime;
-     }
-   } catch(e){
-     console.error("Error restoring AUX state:", e);
-   }
- } else {
-   currentActiveAux = "available";
-   auxStartTime = Date.now();
- }
 }
 
 document.addEventListener("mousedown",()=>isMouseDown=true);
@@ -549,14 +524,14 @@ function login(){
  }
 
  currentUser = found;
- localStorage.setItem("wfm_active_user_id", currentUser.id);
+ sessionStorage.setItem("wfm_current_user", currentUser.id);
 
  if(currentUser.requirePasswordReset){
    document.getElementById("forceChangeModal").classList.remove("hidden");
    return;
  }
 
- initializeAppView(false);
+ initializeAppView();
 }
 
 function submitFirstLoginChange(){
@@ -573,7 +548,7 @@ function submitFirstLoginChange(){
  initializeAppView();
 }
 
-function initializeAppView(isRestore = false){
+function initializeAppView(){
  document.getElementById("loginScreen").classList.add("hidden");
  document.getElementById("app").classList.remove("hidden");
  document.getElementById("roleBadge").textContent=currentUser.role.toUpperCase();
@@ -582,15 +557,7 @@ function initializeAppView(isRestore = false){
  document.getElementById("reportDate").value=selectedDate;
  document.getElementById("historyDate").value=selectedDate;
  
- if(isRestore){
-   restoreLiveAuxState();
-   const a = auxByKey(currentActiveAux);
-   document.getElementById("pillDot").style.background = a?.color || "#22c55e";
-   document.getElementById("pillText").textContent = a?.label || "Available";
- } else {
-   changeActiveAux("available");
- }
-
+ changeActiveAux("unavailable");
  applyPermissions();
  populateFilters();
  renderLegend();
@@ -767,18 +734,21 @@ function changeActiveAux(key){
  const now=Date.now();
  if(currentUser && currentActiveAux){
    const elapsed=(now-auxStartTime)/1000;
-   if(elapsed > 0){
-     logAuxSession(currentUser.id, today(), currentActiveAux, auxStartTime, now, elapsed);
-   }
+   logAuxSession(currentUser.id, today(), currentActiveAux, auxStartTime, now, elapsed);
  }
 
  currentActiveAux=key;
  auxStartTime=now;
- saveAll();
+ 
+ if(currentUser){
+   let liveStatus = JSON.parse(localStorage.getItem("wfm_live_agent_status") || "{}");
+   liveStatus[currentUser.id] = { auxKey: key, startTime: now, userRole: currentUser.role };
+   localStorage.setItem("wfm_live_agent_status", JSON.stringify(liveStatus));
+ }
 
  const a=auxByKey(key);
- document.getElementById("pillDot").style.background=a?.color||"#22c55e";
- document.getElementById("pillText").textContent=a?.label||"Available";
+ document.getElementById("pillDot").style.background=a?.color||"#ef4444";
+ document.getElementById("pillText").textContent=a?.label||"Unavailable";
  updateLiveTimer();
  renderAgentHistory();
 }
@@ -1526,6 +1496,7 @@ function renderDashboard(){
  if(!currentUser||currentUser.role!=="admin")return;
  const date=document.getElementById("reportDate").value||today();
  const agents=users.filter(u=>u.role==="agent");
+ let liveStatus = JSON.parse(localStorage.getItem("wfm_live_agent_status") || "{}");
  let online=0,availableSec=0,breakSec=0;
  let rows="";
  agents.forEach(a=>{
@@ -1540,8 +1511,17 @@ function renderDashboard(){
    availableSec+=avail; breakSec+=brk;
    if(logs.length>0) online++;
 
+   let agentLiveAuxKey = "unavailable";
+   if(a.id === currentUser.id){
+     agentLiveAuxKey = currentActiveAux;
+   } else if(liveStatus[a.id]){
+     agentLiveAuxKey = liveStatus[a.id].auxKey || "unavailable";
+   }
+   const currentAuxObj = auxByKey(agentLiveAuxKey);
+
    rows+=`<tr><td>${esc(a.name)}</td><td>${esc(a.agency)}</td><td>${esc(a.queue)}</td><td>${esc(a.shift)}</td>
-   <td>${esc(auxByKey(currentActiveAux)?.label)}</td><td>${fmt(avail)}</td><td>${fmt(brk)}</td>
+   <td><span class="status-dot" style="background:${currentAuxObj?.color||'#ef4444'}"></span> <b>${esc(currentAuxObj?.label||'Unavailable')}</b></td>
+   <td>${fmt(avail)}</td><td>${fmt(brk)}</td>
    <td>${fmt(lnch)}</td><td>${fmt(oth)}</td></tr>`;
  });
 
@@ -1608,15 +1588,7 @@ function exportCSV(){
 }
 
 function logout(){
- if(currentUser && currentActiveAux){
-   const now = Date.now();
-   const elapsed = (now - auxStartTime) / 1000;
-   if(elapsed > 0){
-     logAuxSession(currentUser.id, today(), currentActiveAux, auxStartTime, now, elapsed);
-   }
- }
-
- localStorage.removeItem("wfm_active_user_id");
+ sessionStorage.removeItem("wfm_current_user");
  currentUser=null;
  if(timerInterval)clearInterval(timerInterval);
  document.getElementById("app").classList.add("hidden");
@@ -1676,10 +1648,6 @@ document.getElementById("scheduleDate").value=today();
 document.getElementById("reportDate").value=today();
 document.getElementById("historyDate").value=today();
 
-// Auto-restore session on page refresh or force reload
-if(currentUser){
- initializeAppView(true);
-}
 
 </script>
 </body>
