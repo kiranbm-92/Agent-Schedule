@@ -348,12 +348,14 @@ button{cursor:pointer;border:0}
   </div>
  </section>
 
- <!-- AGENT ATTENDANCE SUB-DASHBOARD (ADMIN ONLY) -->
+ <!-- AGENT ATTENDANCE SUB-DASHBOARD (ADMIN ONLY WITH MULTI-DATE RANGE SELECTION) -->
  <section id="attendanceSection" class="hidden">
   <div class="card">
-   <div class="toolbar" style="margin-bottom:14px">
-    <label style="font-size:13px;font-weight:700">Attendance Date Filter:</label>
-    <input id="attendanceDate" type="date" onchange="renderAttendance()">
+   <div class="toolbar" style="margin-bottom:14px; gap:12px;">
+    <label style="font-size:13px;font-weight:700">From Date:</label>
+    <input id="attendanceFromDate" type="date" onchange="renderAttendance()">
+    <label style="font-size:13px;font-weight:700">To Date:</label>
+    <input id="attendanceToDate" type="date" onchange="renderAttendance()">
     <input id="searchAttendanceAgent" placeholder="Search agent name/username..." oninput="renderAttendance()">
     <button class="secondary" onclick="exportAttendanceCSV()">Export Attendance CSV</button>
    </div>
@@ -578,6 +580,9 @@ function initializeAppView(){
  document.getElementById("scheduleDate").value=selectedDate;
  document.getElementById("reportDate").value=selectedDate;
  document.getElementById("historyDate").value=selectedDate;
+ 
+ if(document.getElementById("attendanceFromDate")) document.getElementById("attendanceFromDate").value = selectedDate;
+ if(document.getElementById("attendanceToDate")) document.getElementById("attendanceToDate").value = selectedDate;
 
  const savedAuxStateStr = safeStorage.getItem("wfm_user_aux_state_" + currentUser.id);
  if(savedAuxStateStr){
@@ -1250,7 +1255,6 @@ function processImportedMatrix(rows, fileName){
 
   const aux = matchAuxCode(auxLabel);
 
-  /* STRICT TIME CLEANER & PARSER TO PREVENT DATES/GARBAGE FROM OVERWRITING TIMES */
   let parseT = function(tStr) {
    if(!tStr) return 0;
    let raw = String(tStr).trim().toUpperCase();
@@ -1418,63 +1422,91 @@ function renderDashboard(){
  document.getElementById("dashboardBody").innerHTML=rows;
 }
 
+/* HELPER FUNCTION TO GENERATE AN ARRAY OF DATE STRINGS BETWEEN FROM AND TO DATES */
+function getDateRangeArray(startDateStr, endDateStr) {
+ const dates = [];
+ let curr = new Date(startDateStr);
+ const last = new Date(endDateStr);
+ if (isNaN(curr.getTime()) || isNaN(last.getTime())) return [today()];
+ if (curr > last) { const temp = curr; curr = last; last = temp; }
+ while (curr <= last) {
+  dates.push(curr.toISOString().slice(0, 10));
+  curr.setDate(curr.getDate() + 1);
+ }
+ return dates;
+}
+
+/* RENDER AGENT ATTENDANCE LOGS ACROSS MULTIPLE SELECTED DATES */
 function renderAttendance(){
  if(!currentUser||currentUser.role!=="admin")return;
- const dateInput = document.getElementById("attendanceDate");
- if(!dateInput.value) dateInput.value = today();
- const date = dateInput.value;
+ const fromInput = document.getElementById("attendanceFromDate");
+ const toInput = document.getElementById("attendanceToDate");
+ if(!fromInput.value) fromInput.value = today();
+ if(!toInput.value) toInput.value = fromInput.value;
+
+ const dateList = getDateRangeArray(fromInput.value, toInput.value);
  const search = (document.getElementById("searchAttendanceAgent")?.value || "").toLowerCase();
  const agents = users.filter(u=>u.role==="agent");
 
  let rows = "";
- agents.forEach(a => {
-  if(search && !a.name.toLowerCase().includes(search) && !a.username.toLowerCase().includes(search) && (!a.email || !a.email.toLowerCase().includes(search))){ return; }
+ dateList.forEach(date => {
+  agents.forEach(a => {
+   if(search && !a.name.toLowerCase().includes(search) && !a.username.toLowerCase().includes(search) && (!a.email || !a.email.toLowerCase().includes(search))){
+    return;
+   }
 
-  const logs = auxLogs[date + "_" + a.id] || [];
-  let firstAvailableLog = logs.find(l => l.auxKey === "available");
-  let firstAvailTime = firstAvailableLog ? firstAvailableLog.startTime : "N/A";
+   const logs = auxLogs[date + "_" + a.id] || [];
+   let firstAvailableLog = logs.find(l => l.auxKey === "available");
+   let firstAvailTime = firstAvailableLog ? firstAvailableLog.startTime : "N/A";
 
-  let offlineLogs = logs.filter(l => l.auxKey === "offline" || l.auxKey === "unavailable");
-  let lastOfflineLog = offlineLogs.length > 0 ? offlineLogs[offlineLogs.length - 1] : null;
-  let lastOfflineTime = "Active / In Session";
-  if(lastOfflineLog && lastOfflineLog.endTime){ lastOfflineTime = lastOfflineLog.endTime; }
-  else if(date !== today() && !firstAvailableLog){ lastOfflineTime = "N/A"; }
+   let offlineLogs = logs.filter(l => l.auxKey === "offline" || l.auxKey === "unavailable");
+   let lastOfflineLog = offlineLogs.length > 0 ? offlineLogs[offlineLogs.length - 1] : null;
+   let lastOfflineTime = "Active / In Session";
+   if(lastOfflineLog && lastOfflineLog.endTime){ lastOfflineTime = lastOfflineLog.endTime; }
+   else if(date !== today() && !firstAvailableLog){ lastOfflineTime = "N/A"; }
 
-  const dynamicShifts = getAgentDynamicShifts(a, date);
-  const assignedShiftStr = (dynamicShifts && dynamicShifts.length > 0) ? dynamicShifts[0] : (a.shift || "09:00-18:00");
+   const dynamicShifts = getAgentDynamicShifts(a, date);
+   const assignedShiftStr = (dynamicShifts && dynamicShifts.length > 0) ? dynamicShifts[0] : (a.shift || "09:00-18:00");
 
-  rows += `<tr> <td><b>${esc(a.name)}</b></td> <td>${esc(a.username || a.email)}</td> <td>${date}</td> <td>${date}</td> <td><b>${esc(assignedShiftStr)}</b></td> <td><span style="color:#15803d;font-weight:bold">${firstAvailTime}</span></td> <td><span style="color:#b91c1c;font-weight:bold">${lastOfflineTime}</span></td> </tr>`;
+   rows += `<tr> <td><b>${esc(a.name)}</b></td> <td>${esc(a.username || a.email)}</td> <td>${date}</td> <td>${date}</td> <td><b>${esc(assignedShiftStr)}</b></td> <td><span style="color:#15803d;font-weight:bold">${firstAvailTime}</span></td> <td><span style="color:#b91c1c;font-weight:bold">${lastOfflineTime}</span></td> </tr>`;
+  });
  });
 
- if(!rows){ rows = `<tr><td colspan="7" style="text-align:center;color:#667085">No attendance logs found for ${date}.</td></tr>`; }
+ if(!rows){ rows = `<tr><td colspan="7" style="text-align:center;color:#667085">No attendance logs found for selected date range (${fromInput.value} to ${toInput.value}).</td></tr>`; }
  document.getElementById("attendanceBody").innerHTML = rows;
 }
 
+/* EXPORT MULTI-DATE ATTENDANCE LOGS AS CSV */
 function exportAttendanceCSV(){
- const date = document.getElementById("attendanceDate")?.value || today();
+ const fromInput = document.getElementById("attendanceFromDate")?.value || today();
+ const toInput = document.getElementById("attendanceToDate")?.value || fromInput;
+ const dateList = getDateRangeArray(fromInput, toInput);
+
  const lines = [["Agent Name","Username/Email","Start Date","End Date","Assigned Shift","First Available Timestamp","Last Offline Timestamp"].join(",")];
  const agents = users.filter(u=>u.role==="agent");
 
- agents.forEach(a => {
-  const logs = auxLogs[date + "_" + a.id] || [];
-  let firstAvailableLog = logs.find(l => l.auxKey === "available");
-  let firstAvailTime = firstAvailableLog ? firstAvailableLog.startTime : "N/A";
+ dateList.forEach(date => {
+  agents.forEach(a => {
+   const logs = auxLogs[date + "_" + a.id] || [];
+   let firstAvailableLog = logs.find(l => l.auxKey === "available");
+   let firstAvailTime = firstAvailableLog ? firstAvailableLog.startTime : "N/A";
 
-  let offlineLogs = logs.filter(l => l.auxKey === "offline" || l.auxKey === "unavailable");
-  let lastOfflineLog = offlineLogs.length > 0 ? offlineLogs[offlineLogs.length - 1] : null;
-  let lastOfflineTime = (lastOfflineLog && lastOfflineLog.endTime) ? lastOfflineLog.endTime : (date === today() ? "Active / In Session" : "N/A");
+   let offlineLogs = logs.filter(l => l.auxKey === "offline" || l.auxKey === "unavailable");
+   let lastOfflineLog = offlineLogs.length > 0 ? offlineLogs[offlineLogs.length - 1] : null;
+   let lastOfflineTime = (lastOfflineLog && lastOfflineLog.endTime) ? lastOfflineLog.endTime : (date === today() ? "Active / In Session" : "N/A");
 
-  const dynamicShifts = getAgentDynamicShifts(a, date);
-  const assignedShiftStr = (dynamicShifts && dynamicShifts.length > 0) ? dynamicShifts[0] : (a.shift || "09:00-18:00");
+   const dynamicShifts = getAgentDynamicShifts(a, date);
+   const assignedShiftStr = (dynamicShifts && dynamicShifts.length > 0) ? dynamicShifts[0] : (a.shift || "09:00-18:00");
 
-  lines.push([a.name, a.username || a.email, date, date, assignedShiftStr, firstAvailTime, lastOfflineTime].map(csv).join(","));
+   lines.push([a.name, a.username || a.email, date, date, assignedShiftStr, firstAvailTime, lastOfflineTime].map(csv).join(","));
+  });
  });
 
  const blob = new Blob([lines.join("\n")], {type:"text/csv;charset=utf-8"});
  const url = URL.createObjectURL(blob);
  const link = document.createElement("a");
  link.href = url;
- link.download = `WFM_Agent_Attendance_Logs_${date}.csv`;
+ link.download = `WFM_Agent_Attendance_Logs_${fromInput}_to_${toInput}.csv`;
  link.click();
  URL.revokeObjectURL(url);
 }
