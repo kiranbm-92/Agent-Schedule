@@ -488,7 +488,6 @@ function normalizeDateStr(dateStr) {
  return dateStr;
 }
 
-/* ENHANCED LOGIN LOGIC WITH RESILIENT MATCHING */
 function login(){
  const uInput = document.getElementById("loginUser").value.trim();
  const pInput = document.getElementById("loginPass").value.trim();
@@ -1251,20 +1250,29 @@ function processImportedMatrix(rows, fileName){
 
   const aux = matchAuxCode(auxLabel);
 
-  if(aux && startTime && endTime){
-   let parseT = function(tStr) {
-    if(!tStr) return 0;
-    tStr = String(tStr).trim();
-    let parts = tStr.split(':');
-    let h = parseInt(parts[0], 10) || 0;
-    let m = parts.length > 1 ? (parseInt(parts[1], 10) || 0) : 0;
-    return h * 60 + m;
-   };
+  /* FIXED MULTI-FORMAT PARSER FOR 12-HOUR, 24-HOUR, AND EXCEL DECIMAL TIMES */
+  let parseT = function(tStr) {
+   if(!tStr) return 0;
+   tStr = String(tStr).trim().toUpperCase();
+   if(!isNaN(tStr) && parseFloat(tStr) < 1) {
+    return Math.round(parseFloat(tStr) * 1440);
+   }
+   let isPM = tStr.includes("PM");
+   let isAM = tStr.includes("AM");
+   let clean = tStr.replace(/[^\d:]/g, "");
+   let parts = clean.split(':');
+   let h = parseInt(parts[0], 10) || 0;
+   let m = parts.length > 1 ? (parseInt(parts[1], 10) || 0) : 0;
+   if(isPM && h < 12) h += 12;
+   if(isAM && h === 12) h = 0;
+   return h * 60 + m;
+  };
 
-   const startMin = parseT(startTime);
-   let endMin = parseT(endTime);
-   const realEndMin = (endMin === 0 && startMin > 0) ? 1440 : endMin;
+  const startMin = parseT(startTime);
+  let endMin = parseT(endTime);
+  const realEndMin = (endMin === 0 && startMin > 0) ? 1440 : endMin;
 
+  if(aux && (startTime !== "" || endTime !== "")){
    if(normStartDate !== normEndDate && normEndDate !== ""){
     const key1 = dayKey(normStartDate, agent.id);
     if(!continuousSchedules[key1]) continuousSchedules[key1] = [];
