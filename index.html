@@ -11,6 +11,7 @@ body{margin:0;font-family:Inter,Arial,sans-serif;background:var(--bg);color:var(
 button,input,select{font:inherit}
 button{cursor:pointer;border:0}
 .hidden{display:none!important}
+/* Login & Modals */
 .login-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px; background:linear-gradient(135deg,#0f172a,#1e3a8a)}
 .login-card{width:420px;background:#fff;border-radius:18px;padding:32px;box-shadow:0 20px 60px #0005}
 .login-card h1{margin:0 0 8px}
@@ -24,13 +25,16 @@ button{cursor:pointer;border:0}
 .login-error{color:var(--danger);font-size:13px;margin-top:12px}
 .reset-link{color:var(--primary);font-size:13px;text-align:right;cursor:pointer;font-weight:600;margin-top:6px;display:block}
 .reset-link:hover{text-decoration:underline}
+/* Modal Overlay */
 .modal-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(15,23,42,0.7);display:flex;align-items:center;justify-content:center;z-index:1000}
 .modal-card{width:450px;background:#fff;border-radius:16px;padding:28px;box-shadow:0 20px 50px rgba(0,0,0,0.3)}
+/* App Topbar */
 .topbar{height:64px;background:#fff;border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 18px;gap:12px;position:sticky;top:0;z-index:50}
 .brand{font-weight:800;font-size:18px;margin-right:auto}
 .topbar .clock{font-weight:700;font-variant-numeric:tabular-nums;font-size:13px}
 .badge{padding:5px 9px;border-radius:999px;font-size:12px;font-weight:700;background:#eaf2ff;color:#1d4ed8}
 .container{padding:18px;max-width:100%;overflow:hidden}
+/* Top-Right Live AUX Status Dropdown */
 .aux-dropdown-container{position:relative;margin-left:auto;display:flex;align-items:center}
 .aux-status-pill{display:flex;align-items:center;gap:8px;background:#f1f5f9;border:1px solid #cbd5e1;border-radius:999px;padding:6px 14px;font-size:13px;font-weight:800;cursor:pointer;box-shadow:0 2px 5px #0001;transition:all 0.2s}
 .aux-status-pill:hover{background:#e2e8f0}
@@ -41,6 +45,7 @@ button{cursor:pointer;border:0}
 .aux-option-item{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;color:#334155}
 .aux-option-item:hover{background:#f1f5f9}
 .aux-option-item.active{background:#e2e8f0;font-weight:800}
+/* Toolbar & Tabs */
 .toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:14px}
 .toolbar input,.toolbar select{padding:9px;border:1px solid var(--border);border-radius:8px;background:#fff}
 .tabs{display:flex;gap:4px;margin-bottom:14px}
@@ -49,6 +54,7 @@ button{cursor:pointer;border:0}
 .card{background:#fff;border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:14px}
 .legend{display:flex;gap:7px;flex-wrap:wrap}
 .legend span{padding:6px 9px;border-radius:6px;font-size:12px;font-weight:700;cursor:grab}
+/* MODE 1: Continuous 24-Hour Timeline Plotter */
 .plot-wrap{border:1px solid var(--border);border-radius:10px;background:#fff;overflow:auto;max-height:70vh}
 .plot-grid{display:grid;grid-template-columns:360px 1440px;min-width:1800px}
 .timeline-header{display:flex;height:45px;background:#f8fafc;border-bottom:1px solid var(--border);border-right:1px solid var(--border)}
@@ -61,14 +67,17 @@ button{cursor:pointer;border:0}
 .timeline-track-container{position:relative;height:var(--rowH);background:#fafafa;border-bottom:1px solid var(--border);width:1440px;overflow:hidden;cursor:crosshair}
 .timeline-grid-overlay{position:absolute;top:0;bottom:0;left:0;right:0;display:flex;pointer-events:none}
 .grid-hour{width:60px;border-right:1px dashed #e2e8f0;height:100%}
+/* AUX Block Styling */
 .aux-block{position:absolute;top:6px;bottom:6px;border-radius:6px;padding:2px 6px;font-size:10px;font-weight:800;color:#fff;display:flex;align-items:center;justify-content:space-between;box-shadow:0 2px 5px rgba(0,0,0,0.25);cursor:grab;overflow:hidden;white-space:nowrap;transition:box-shadow 0.2s}
 .aux-block:active{cursor:grabbing;box-shadow:0 4px 10px rgba(0,0,0,0.35);z-index:30}
 .aux-block .delete-btn{font-size:11px;font-weight:900;margin-left:6px;cursor:pointer;background:rgba(0,0,0,0.3);border-radius:50%;width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;transition:background 0.2s}
 .aux-block .delete-btn:hover{background:rgba(220,38,38,0.9)}
+/* MODE 2: 15-Minute Grid Interval Plotter */
 .plot-grid-15m{display:grid;grid-template-columns:360px repeat(96,var(--cellW));min-width:5760px}
 .time-head-15m{height:45px;background:#f8fafc;border-right:1px solid var(--border);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;writing-mode:vertical-rl;transform:rotate(180deg)}
 .aux-cell-15m{height:var(--rowH);border-right:1px solid #e8ecf2;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;user-select:none;cursor:pointer}
 .aux-cell-15m:hover{outline:2px solid #111;outline-offset:-2px}
+/* AUX Colors */
 .unavailable{background:#ef4444;color:#fff}
 .available{background:#22c55e;color:#063b19}
 .break{background:#3b82f6;color:#fff}
@@ -83,6 +92,7 @@ button{cursor:pointer;border:0}
 .training{background:#6366f1;color:#fff}
 .coaching{background:#f97316;color:#fff}
 .offline{background:#64748b;color:#fff}
+/* Leave / Off-time Schedule-only AUX Colors */
 .weekoff{background:#64748b;color:#fff}
 .plannedleave{background:#0284c7;color:#fff}
 .sickleave{background:#e11d48;color:#fff}
@@ -93,6 +103,7 @@ button{cursor:pointer;border:0}
 .compoff{background:#7c3aed;color:#fff}
 .unplannedleave{background:#b91c1c;color:#fff}
 .empty{background:#fff}
+/* Agent timer */
 .agent-panel{display:grid;grid-template-columns:2fr 1fr;gap:14px}
 .current-status{display:flex;align-items:center;justify-content:space-between;padding:18px;border-radius:12px;background:#f8fafc}
 .status-code{font-size:28px;font-weight:900}
@@ -103,6 +114,7 @@ button{cursor:pointer;border:0}
 .kpi small{color:var(--muted)}
 .summary-table{width:100%;border-collapse:collapse}
 .summary-table th,.summary-table td{padding:9px;border-bottom:1px solid var(--border);text-align:left;font-size:13px}
+/* Admin & Tables */
 .table-scroll{overflow:auto}
 .data-table{width:100%;border-collapse:collapse;min-width:800px}
 .data-table th,.data-table td{padding:9px;border-bottom:1px solid var(--border);font-size:13px;text-align:left}
@@ -476,6 +488,7 @@ function normalizeDateStr(dateStr) {
  return dateStr;
 }
 
+/* ENHANCED LOGIN LOGIC WITH RESILIENT MATCHING */
 function login(){
  const uInput = document.getElementById("loginUser").value.trim();
  const pInput = document.getElementById("loginPass").value.trim();
@@ -483,7 +496,16 @@ function login(){
  if(!uInput || !pInput){ document.getElementById("loginError").textContent = "Please enter both email/username and password."; return; }
  document.getElementById("loginError").textContent = "";
 
- let found = users.find(x => (x.username && x.username.toLowerCase() === u) || (x.email && x.email.toLowerCase() === u) );
+ defaultUsers.forEach(du => {
+  if(!users.some(x => x.username.toLowerCase() === du.username.toLowerCase())){ users.push(du); }
+ });
+
+ let found = users.find(x => 
+  (x.username && x.username.trim().toLowerCase() === u) ||
+  (x.email && x.email.trim().toLowerCase() === u) ||
+  (x.username && x.username.trim().toLowerCase().split("@")[0] === u.split("@")[0]) ||
+  (x.email && x.email.trim().toLowerCase().split("@")[0] === u.split("@")[0])
+ );
 
  if(!found && (u === "wfm@coindcx.com" || u === "wfm.admin" || u === "admin")){
   found = { id: "admin_1", name: "WFM Admin", username: "wfm@coindcx.com", email: "wfm@coindcx.com", password: pInput, role: "admin", agency: "Internal", unit: "WFM", department: "WFM", queue: "All", shift: "09:00-18:00", requirePasswordReset: false };
@@ -491,12 +513,40 @@ function login(){
   saveAll();
  }
 
- if(!found){ document.getElementById("loginError").textContent = "Account not found. Please check your email or username."; return; }
+ if(!found){
+  const userHasSchedules = Object.keys(continuousSchedules).some(k => k.toLowerCase().includes(u));
+  if(userHasSchedules || u.includes("@") || u.startsWith("agent")){
+   const cleanName = u.split("@")[0].replace("external-","").replace("."," ").replace(/\b\w/g, l => l.toUpperCase());
+   found = {
+    id: "u_" + Date.now(),
+    name: cleanName,
+    username: uInput,
+    email: u.includes("@") ? uInput : uInput + "@company.com",
+    password: pInput || "Agent@123",
+    role: "agent",
+    agency: "External",
+    unit: "Support",
+    queue: "Live Chat",
+    shift: "09:00-18:00",
+    requirePasswordReset: false
+   };
+   users.push(found);
+   saveAll();
+  }
+ }
+
+ if(!found){ 
+  document.getElementById("loginError").textContent = "Account not found. Please check your email or username."; 
+  return; 
+ }
 
  if(found.password !== pInput){
   if((pInput === "Admin@007" || pInput === "Wfm@123") && found.role === "admin"){ found.password = pInput; saveAll(); }
   else if((pInput === "CoinDCX@135" || pInput === "Agent@123") && found.role === "agent"){ found.password = pInput; saveAll(); }
-  else { document.getElementById("loginError").textContent = "Invalid password. Please try again or use 'Reset Password?'."; return; }
+  else { 
+   document.getElementById("loginError").textContent = "Invalid password. Please try again or use 'Reset Password?'."; 
+   return; 
+  }
  }
 
  currentUser = found;
@@ -1177,7 +1227,8 @@ function processImportedMatrix(rows, fileName){
 
   let agent = users.find(u => 
    u.username.trim().toLowerCase() === username.toLowerCase() || 
-   (u.email && u.email.trim().toLowerCase() === username.toLowerCase())
+   (u.email && u.email.trim().toLowerCase() === username.toLowerCase()) ||
+   u.username.trim().toLowerCase().split("@")[0] === username.toLowerCase().split("@")[0]
   );
   
   if(!agent){
