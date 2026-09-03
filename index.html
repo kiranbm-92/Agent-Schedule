@@ -348,7 +348,7 @@ button{cursor:pointer;border:0}
   </div>
  </section>
 
- <!-- AGENT ATTENDANCE SUB-DASHBOARD (ADMIN ONLY WITH DIRECT INPUT & CHANGE LISTENERS) -->
+ <!-- AGENT ATTENDANCE SUB-DASHBOARD (ADMIN ONLY) -->
  <section id="attendanceSection" class="hidden">
   <div class="card">
    <div class="toolbar" style="margin-bottom:14px; gap:12px;">
@@ -1200,12 +1200,30 @@ function processImportedMatrix(rows, fileName){
  let count = 0;
  
  let header = rows[0].map(c => String(c || '').trim().toLowerCase().replace(/_/g, ' '));
- let idxStartDate = header.findIndex(h => h.includes('start date') || h.includes('date'));
- let idxEndDate = header.findIndex(h => h.includes('end date'));
- let idxUsername = header.findIndex(h => h.includes('user') || h.includes('email') || h.includes('agent'));
- let idxAux = header.findIndex(h => h.includes('aux') || h.includes('code') || h.includes('status'));
- let idxStartTime = header.findIndex(h => h.includes('start time') || h.includes('start'));
- let idxEndTime = header.findIndex(h => h.includes('end time') || h.includes('end'));
+ 
+ let idxStartDate = -1, idxEndDate = -1, idxUsername = -1, idxAux = -1, idxStartTime = -1, idxEndTime = -1;
+
+ for(let j = 0; j < header.length; j++){
+  let h = header[j];
+  if(h === 'start date' || h === 'date' || h === 'sdate' || h === 'startdate'){
+   idxStartDate = j;
+  } else if(h === 'end date' || h === 'edate' || h === 'enddate'){
+   idxEndDate = j;
+  } else if(h.includes('user') || h.includes('email') || h.includes('agent')){
+   idxUsername = j;
+  } else if(h.includes('aux') || h.includes('code') || h.includes('status')){
+   idxAux = j;
+  } else if(h === 'start time' || h === 'starttime' || h === 'stime' || h === 'start'){
+   idxStartTime = j;
+  } else if(h === 'end time' || h === 'endtime' || h === 'etime' || h === 'end'){
+   idxEndTime = j;
+  }
+ }
+
+ if(idxStartDate === -1) idxStartDate = header.findIndex(h => h.includes('start date') || h.includes('sdate'));
+ if(idxEndDate === -1) idxEndDate = header.findIndex(h => h.includes('end date') || h.includes('edate'));
+ if(idxStartTime === -1) idxStartTime = header.findIndex(h => h.includes('start time') || h.includes('stime'));
+ if(idxEndTime === -1) idxEndTime = header.findIndex(h => h.includes('end time') || h.includes('etime'));
 
  if(idxStartDate === -1) idxStartDate = 0;
  if(idxEndDate === -1) idxEndDate = 1;
@@ -1258,8 +1276,9 @@ function processImportedMatrix(rows, fileName){
   const aux = matchAuxCode(auxLabel);
 
   let parseT = function(tStr) {
-   if(!tStr) return 0;
+   if(!tStr && tStr !== 0) return 0;
    let raw = String(tStr).trim().toUpperCase();
+   if(raw === "0" || raw === "0:00" || raw === "00:00") return 0;
    if(!isNaN(raw) && parseFloat(raw) < 1) {
     return Math.round(parseFloat(raw) * 1440);
    }
