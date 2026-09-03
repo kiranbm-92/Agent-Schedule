@@ -666,11 +666,7 @@ function sendOTP(){
  targetResetUser.email=email;
  generatedOTP=String(Math.floor(100000 + Math.random() * 900000));
  
- alert(`[DEMO OTP SERVICE]
-
-OTP sent successfully to active email: ${email}
-
-Your 6-Digit OTP Code is: ${generatedOTP}`);
+ alert(`[DEMO OTP SERVICE]\n\nOTP sent successfully to active email: ${email}\n\nYour 6-Digit OTP Code is: ${generatedOTP}`);
  
  document.getElementById("otpStep1").classList.add("hidden");
  document.getElementById("otpStep2").classList.remove("hidden");
@@ -1329,8 +1325,7 @@ function downloadSampleTemplate(){
    "2026-09-01,2026-09-01,external-nawaz.p@coindcx.com,Planned Leave,15:00,00:00",
    "2026-09-01,2026-09-02,external-mohammed.roshan@coindcx.com,Comp Off,23:00,08:00"
  ];
- const sampleContent = sampleLines.join("
-");
+ const sampleContent = sampleLines.join("\n");
  const blob = new Blob([sampleContent], {type: "text/csv;charset=utf-8"});
  const url = URL.createObjectURL(blob);
  const a = document.createElement("a");
@@ -1359,9 +1354,7 @@ function handleExcelImport(event){
      } else {
        // Text fallback for CSV
        const text = new TextDecoder().decode(e.target.result);
-       rows = text.split(/
-?
-/).map(line => line.split(",").map(c => c.replace(/^["']|["']$/g,"").trim()));
+       rows = text.split(/\r?\n/).map(line => line.split(",").map(c => c.replace(/^["']|["']$/g,"").trim()));
      }
      
      processImportedMatrix(rows, file.name);
@@ -1370,9 +1363,7 @@ function handleExcelImport(event){
      const textReader = new FileReader();
      textReader.onload = function(evt) {
        const text = evt.target.result;
-       const rows = text.split(/
-?
-/).map(line => line.split(",").map(c => c.replace(/^["']|["']$/g,"").trim()));
+       const rows = text.split(/\r?\n/).map(line => line.split(",").map(c => c.replace(/^["']|["']$/g,"").trim()));
        processImportedMatrix(rows, file.name);
      };
      textReader.readAsText(file);
@@ -1425,7 +1416,7 @@ function processImportedMatrix(rows, fileName){
    // Auto-find or create user profile
    let agent = users.find(u => u.username.toLowerCase() === username.toLowerCase() || (u.email && u.email.toLowerCase() === username.toLowerCase()));
    if(!agent){
-     const cleanName = username.split("@")[0].replace("external-","").replace("."," ").replace(/ \w/g, l => l.toUpperCase());
+     const cleanName = username.split("@")[0].replace("external-","").replace("."," ").replace(/\b\w/g, l => l.toUpperCase());
      agent = {
        id: "u_" + Date.now() + "_" + Math.floor(Math.random()*1000),
        name: cleanName,
@@ -1732,8 +1723,7 @@ function exportAttendanceCSV(){
    lines.push([a.name, a.username || a.email, date, date, assignedShiftStr, firstAvailTime, lastOfflineTime].map(csv).join(","));
  });
 
- const blob = new Blob([lines.join("
-")], {type:"text/csv;charset=utf-8"});
+ const blob = new Blob([lines.join("\n")], {type:"text/csv;charset=utf-8"});
  const url = URL.createObjectURL(blob);
  const link = document.createElement("a");
  link.href = url;
@@ -1885,8 +1875,7 @@ function exportCSV(){
     lines.push([date,a.name,a.username,a.agency,a.unit,a.queue,aux?.label||l.auxKey,l.startTime,l.endTime,l.durationSec].map(csv).join(","));
   });
  });
- const blob=new Blob([lines.join("
-")],{type:"text/csv;charset=utf-8"});
+ const blob=new Blob([lines.join("\n")],{type:"text/csv;charset=utf-8"});
  const url=URL.createObjectURL(blob),link=document.createElement("a");
  link.href=url;link.download=`WFM_AUX_History_${date}.csv`;link.click();URL.revokeObjectURL(url);
 }
