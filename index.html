@@ -465,6 +465,16 @@ function saveAll(){ safeStorage.setItem("wfm_users",JSON.stringify(users)); safe
 document.addEventListener("mousedown",()=>isMouseDown=true);
 document.addEventListener("mouseup",()=>isMouseDown=false);
 
+/* REAL-TIME CROSS-TAB STORAGE EVENT LISTENER FOR INSTANT AGENT STATUS UPDATES */
+window.addEventListener("storage", (e) => {
+ if(e.key === "wfm_live_agent_status" || e.key === "wfm_aux_logs"){
+  if(currentUser && currentUser.role === "admin"){
+   renderDashboard();
+   renderAttendance();
+  }
+ }
+});
+
 function calculateNextDate(dateStr) {
  const d = new Date(dateStr);
  d.setDate(d.getDate() + 1);
@@ -738,6 +748,7 @@ function changeActiveAux(key, preservedStartTime){
  document.getElementById("pillText").textContent = a?.label || "Unavailable";
  updateLiveTimer();
  renderAgentHistory();
+ if(currentUser && currentUser.role === "admin"){ renderDashboard(); }
 }
 
 function logAuxSession(userId, date, auxKey, start, end, durationSec){
@@ -1395,6 +1406,7 @@ function renderAgentHistory(){
  document.getElementById("agentUsageTable").innerHTML=rows;
 }
 
+/* REAL-TIME DYNAMIC REPORTING DASHBOARD UPDATE */
 function renderDashboard(){
  if(!currentUser||currentUser.role!=="admin")return;
  const date=document.getElementById("reportDate").value||today();
