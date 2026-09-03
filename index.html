@@ -348,14 +348,14 @@ button{cursor:pointer;border:0}
   </div>
  </section>
 
- <!-- AGENT ATTENDANCE SUB-DASHBOARD (ADMIN ONLY WITH MULTI-DATE RANGE SELECTION) -->
+ <!-- AGENT ATTENDANCE SUB-DASHBOARD (ADMIN ONLY WITH DIRECT INPUT & CHANGE LISTENERS) -->
  <section id="attendanceSection" class="hidden">
   <div class="card">
    <div class="toolbar" style="margin-bottom:14px; gap:12px;">
     <label style="font-size:13px;font-weight:700">From Date:</label>
-    <input id="attendanceFromDate" type="date" onchange="renderAttendance()">
+    <input id="attendanceFromDate" type="date" onchange="renderAttendance()" oninput="renderAttendance()">
     <label style="font-size:13px;font-weight:700">To Date:</label>
-    <input id="attendanceToDate" type="date" onchange="renderAttendance()">
+    <input id="attendanceToDate" type="date" onchange="renderAttendance()" oninput="renderAttendance()">
     <input id="searchAttendanceAgent" placeholder="Search agent name/username..." oninput="renderAttendance()">
     <button class="secondary" onclick="exportAttendanceCSV()">Export Attendance CSV</button>
    </div>
@@ -581,8 +581,10 @@ function initializeAppView(){
  document.getElementById("reportDate").value=selectedDate;
  document.getElementById("historyDate").value=selectedDate;
  
- if(document.getElementById("attendanceFromDate")) document.getElementById("attendanceFromDate").value = selectedDate;
- if(document.getElementById("attendanceToDate")) document.getElementById("attendanceToDate").value = selectedDate;
+ const fromElem = document.getElementById("attendanceFromDate");
+ const toElem = document.getElementById("attendanceToDate");
+ if(fromElem) fromElem.value = selectedDate;
+ if(toElem) toElem.value = selectedDate;
 
  const savedAuxStateStr = safeStorage.getItem("wfm_user_aux_state_" + currentUser.id);
  if(savedAuxStateStr){
@@ -1422,7 +1424,6 @@ function renderDashboard(){
  document.getElementById("dashboardBody").innerHTML=rows;
 }
 
-/* HELPER FUNCTION TO GENERATE AN ARRAY OF DATE STRINGS BETWEEN FROM AND TO DATES */
 function getDateRangeArray(startDateStr, endDateStr) {
  const dates = [];
  let curr = new Date(startDateStr);
@@ -1436,15 +1437,15 @@ function getDateRangeArray(startDateStr, endDateStr) {
  return dates;
 }
 
-/* RENDER AGENT ATTENDANCE LOGS ACROSS MULTIPLE SELECTED DATES */
 function renderAttendance(){
  if(!currentUser||currentUser.role!=="admin")return;
- const fromInput = document.getElementById("attendanceFromDate");
- const toInput = document.getElementById("attendanceToDate");
- if(!fromInput.value) fromInput.value = today();
- if(!toInput.value) toInput.value = fromInput.value;
+ let fromVal = document.getElementById("attendanceFromDate")?.value;
+ let toVal = document.getElementById("attendanceToDate")?.value;
+ 
+ if(!fromVal) { fromVal = today(); if(document.getElementById("attendanceFromDate")) document.getElementById("attendanceFromDate").value = fromVal; }
+ if(!toVal) { toVal = fromVal; if(document.getElementById("attendanceToDate")) document.getElementById("attendanceToDate").value = toVal; }
 
- const dateList = getDateRangeArray(fromInput.value, toInput.value);
+ const dateList = getDateRangeArray(fromVal, toVal);
  const search = (document.getElementById("searchAttendanceAgent")?.value || "").toLowerCase();
  const agents = users.filter(u=>u.role==="agent");
 
@@ -1472,11 +1473,10 @@ function renderAttendance(){
   });
  });
 
- if(!rows){ rows = `<tr><td colspan="7" style="text-align:center;color:#667085">No attendance logs found for selected date range (${fromInput.value} to ${toInput.value}).</td></tr>`; }
+ if(!rows){ rows = `<tr><td colspan="7" style="text-align:center;color:#667085">No attendance logs found for selected date range (${fromVal} to ${toVal}).</td></tr>`; }
  document.getElementById("attendanceBody").innerHTML = rows;
 }
 
-/* EXPORT MULTI-DATE ATTENDANCE LOGS AS CSV */
 function exportAttendanceCSV(){
  const fromInput = document.getElementById("attendanceFromDate")?.value || today();
  const toInput = document.getElementById("attendanceToDate")?.value || fromInput;
