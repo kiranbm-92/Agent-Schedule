@@ -510,42 +510,66 @@ function normalizeDateStr(dateStr) {
 
 /* STRICT PASSWORD LOGIN IMPLEMENTATION */
 function login(){
- const u=document.getElementById("loginUser").value.trim().toLowerCase();
- const p=document.getElementById("loginPass").value;
+ const uInput = document.getElementById("loginUser").value.trim();
+ const pInput = document.getElementById("loginPass").value;
+ const u = uInput.toLowerCase();
  
- if(!u||!p){
-   document.getElementById("loginError").textContent="Please enter both email/username and password.";
+ if(!uInput || !pInput){
+   document.getElementById("loginError").textContent = "Please enter both email/username and password.";
    return;
  }
 
- // Find user by username or email
- let found = users.find(x => x.username.toLowerCase()===u || (x.email && x.email.toLowerCase()===u));
+ document.getElementById("loginError").textContent = "";
 
- if(!found){
-   // Check default admin login fallback
-   if((u==="wfm@coindcx.com" || u==="wfm.admin") && (p==="Admin@007" || p==="Wfm@123")){
-     found = {id:"admin_1", name:"WFM Admin", username:"wfm@coindcx.com", email:"wfm@coindcx.com", password:p, role:"admin", agency:"Internal", unit:"WFM", queue:"All", shift:"09:00-18:00", requirePasswordReset:false};
-     users.push(found);
-     saveAll();
-   } else {
-     document.getElementById("loginError").textContent="Invalid username or password.";
-     return;
-   }
+ // Find user by username or email
+ let found = users.find(x => 
+   (x.username && x.username.toLowerCase() === u) || 
+   (x.email && x.email.toLowerCase() === u)
+ );
+
+ // Admin Fallback
+ if(!found && (u === "wfm@coindcx.com" || u === "wfm.admin" || u === "admin")){
+   found = {
+     id: "admin_1", 
+     name: "WFM Admin", 
+     username: "wfm@coindcx.com", 
+     email: "wfm@coindcx.com", 
+     password: pInput, 
+     role: "admin", 
+     agency: "Internal", 
+     unit: "WFM", 
+     department: "WFM",
+     queue: "All", 
+     shift: "09:00-18:00", 
+     requirePasswordReset: false
+   };
+   users.push(found);
+   saveAll();
  }
 
- // Validate password strictly against user's account password
- if(found.password !== p){
-   // Allow fallback CoinDCX@135 for uncustomized agents only if password was default
-   if(found.role === "agent" && (p === "CoinDCX@135" || p === "Agent@123") && (found.password === "CoinDCX@135" || found.password === "Agent@123")){
-     // matched
+ if(!found){
+   document.getElementById("loginError").textContent = "Account not found. Please check your email or username.";
+   return;
+ }
+
+ // Validate password
+ if(found.password !== pInput){
+   // Fallback master passwords for demo accounts
+   if((pInput === "Admin@007" || pInput === "Wfm@123") && found.role === "admin"){
+     found.password = pInput;
+     saveAll();
+   } else if((pInput === "CoinDCX@135" || pInput === "Agent@123") && found.role === "agent"){
+     found.password = pInput;
+     saveAll();
    } else {
-     document.getElementById("loginError").textContent="Invalid username or password.";
+     document.getElementById("loginError").textContent = "Invalid password. Please try again or use 'Reset Password?'.";
      return;
    }
  }
 
  currentUser = found;
- localStorage.setItem("wfm_current_user_id", currentUser.id); sessionStorage.setItem("wfm_current_user", currentUser.id);
+ localStorage.setItem("wfm_current_user_id", currentUser.id);
+ sessionStorage.setItem("wfm_current_user", currentUser.id);
 
  if(currentUser.requirePasswordReset){
    document.getElementById("forceChangeModal").classList.remove("hidden");
