@@ -1250,29 +1250,34 @@ function processImportedMatrix(rows, fileName){
 
   const aux = matchAuxCode(auxLabel);
 
-  /* FIXED MULTI-FORMAT PARSER FOR 12-HOUR, 24-HOUR, AND EXCEL DECIMAL TIMES */
+  /* STRICT TIME CLEANER & PARSER TO PREVENT DATES/GARBAGE FROM OVERWRITING TIMES */
   let parseT = function(tStr) {
    if(!tStr) return 0;
-   tStr = String(tStr).trim().toUpperCase();
-   if(!isNaN(tStr) && parseFloat(tStr) < 1) {
-    return Math.round(parseFloat(tStr) * 1440);
+   let raw = String(tStr).trim().toUpperCase();
+   if(!isNaN(raw) && parseFloat(raw) < 1) {
+    return Math.round(parseFloat(raw) * 1440);
    }
-   let isPM = tStr.includes("PM");
-   let isAM = tStr.includes("AM");
-   let clean = tStr.replace(/[^\d:]/g, "");
-   let parts = clean.split(':');
-   let h = parseInt(parts[0], 10) || 0;
-   let m = parts.length > 1 ? (parseInt(parts[1], 10) || 0) : 0;
-   if(isPM && h < 12) h += 12;
-   if(isAM && h === 12) h = 0;
-   return h * 60 + m;
+   let match = raw.match(/(\d{1,2}):(\d{2})/);
+   if (match) {
+    let h = parseInt(match[1], 10);
+    let m = parseInt(match[2], 10);
+    if (raw.includes("PM") && h < 12) h += 12;
+    if (raw.includes("AM") && h === 12) h = 0;
+    return h * 60 + m;
+   }
+   let hOnly = raw.replace(/[^\d]/g, "");
+   if (hOnly.length >= 1 && hOnly.length <= 4) {
+    let num = parseInt(hOnly, 10);
+    if (num <= 24) return num * 60;
+   }
+   return 0;
   };
 
   const startMin = parseT(startTime);
   let endMin = parseT(endTime);
   const realEndMin = (endMin === 0 && startMin > 0) ? 1440 : endMin;
 
-  if(aux && (startTime !== "" || endTime !== "")){
+  if(aux){
    if(normStartDate !== normEndDate && normEndDate !== ""){
     const key1 = dayKey(normStartDate, agent.id);
     if(!continuousSchedules[key1]) continuousSchedules[key1] = [];
