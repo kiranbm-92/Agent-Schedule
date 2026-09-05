@@ -244,34 +244,35 @@ button{cursor:pointer;border:0}
  <div class="tabs">
   <button id="plotTab" class="tab active" onclick="showTab('plot')">Schedule Plotter</button>
   <button id="agentTab" class="tab" onclick="showTab('agent')">My Status & History</button>
-  <button id="dashboardTab" class="tab" onclick="showTab('dashboard')">Reporting Dashboard</button>
-  <button id="attendanceTab" class="tab adminOnly" onclick="showTab('attendance')">Agent Attendance Logs</button>
-  <button id="adminTab" class="tab" onclick="showTab('admin')">Admin</button>
+  <button id="dashboardTab" class="tab managerOnly" onclick="showTab('dashboard')">Reporting Dashboard</button>
+  <button id="attendanceTab" class="tab managerOnly" onclick="showTab('attendance')">Agent Attendance Logs</button>
+  <button id="adminTab" class="tab adminOnly" onclick="showTab('admin')">Admin</button>
+  <button id="settingsTab" class="tab adminOnly" onclick="showTab('settings')">Settings</button>
  </div>
 
  <!-- PLOTTER -->
  <section id="plotSection">
   <div class="toolbar">
-   <input id="scheduleDate" class="adminOnly" type="date" onchange="renderPlot()">
-   <input id="searchAgent" class="adminOnly" placeholder="Search agent..." oninput="renderPlot()">
-   <select id="agencyFilter" class="adminOnly" onchange="renderPlot()"><option value="">All Agencies</option></select>
-   <select id="queueFilter" class="adminOnly" onchange="renderPlot()"><option value="">All Queues</option></select>
-   <select id="plotModeSelect" class="adminOnly" onchange="switchPlotMode()" style="font-weight:700;border:1px solid #2563eb;color:#2563eb">
+   <input id="scheduleDate" class="managerOnly" type="date" onchange="renderPlot()">
+   <input id="searchAgent" class="managerOnly" placeholder="Search agent..." oninput="renderPlot()">
+   <select id="agencyFilter" class="managerOnly" onchange="renderPlot()"><option value="">All Agencies</option></select>
+   <select id="queueFilter" class="managerOnly" onchange="renderPlot()"><option value="">All Queues</option></select>
+   <select id="plotModeSelect" class="managerOnly" onchange="switchPlotMode()" style="font-weight:700;border:1px solid #2563eb;color:#2563eb">
     <option value="timeline">24-Hour Continuous Timeline View</option>
     <option value="grid15m">15-Minute Grid Interval Plotter View</option>
    </select>
    <input type="file" id="excelFileInput" accept=".xlsx, .xls, .csv" class="hidden" onchange="handleExcelImport(event)">
-   <button class="secondary adminOnly" onclick="downloadSampleTemplate()">📥 Download Sample Template (.csv)</button>
+   <button class="secondary managerOnly" onclick="downloadSampleTemplate()">📥 Download Sample Template (.csv)</button>
    <button class="secondary adminOnly" onclick="document.getElementById('excelFileInput').click()">📤 Import Excel/CSV</button>
    <button class="primary adminOnly" onclick="addAgent()">+ Add Agent</button>
    <button class="danger adminOnly" onclick="clearWholeDaySchedule()" style="background:#dc2626">🗑️ Clear Active Date (All Agents)</button>
    <button class="secondary adminOnly" onclick="clearSelectedAgent()">Clear Particular Agent Schedule</button>
    <button class="danger adminOnly" onclick="clearEntireDatabaseSchedules()" style="background:#991b1b">⚠️ Clear ALL System Schedules (All Dates)</button>
    <button class="secondary adminOnly" onclick="saveSchedules()">Save Schedule</button>
-   <button class="secondary adminOnly" onclick="exportCSV()">Export AUX CSV</button>
+   <button class="secondary managerOnly" onclick="exportCSV()">Export AUX CSV</button>
   </div>
 
-  <div class="card adminOnly">
+  <div class="card managerOnly">
    <b>Schedule Plotter Tools:</b>
    <div id="modeInstructionText" style="font-size:12px;color:#667085;margin-top:4px">
     • <b>Drag from Legend:</b> Drag any AUX code onto the 24-hour timeline to create a block.<br>
@@ -336,7 +337,7 @@ button{cursor:pointer;border:0}
  <section id="dashboardSection" class="hidden">
   <div class="toolbar">
    <input id="reportDate" type="date" onchange="renderDashboard()">
-   <button class="secondary" onclick="exportCSV()">Export Detailed AUX Report</button>
+   <button class="secondary managerOnly" onclick="exportCSV()">Export Detailed AUX Report</button>
   </div>
   <div id="dashboardKpis" class="kpis"></div>
   <div class="card">
@@ -348,7 +349,7 @@ button{cursor:pointer;border:0}
   </div>
  </section>
 
- <!-- AGENT ATTENDANCE SUB-DASHBOARD (ADMIN ONLY) -->
+ <!-- AGENT ATTENDANCE SUB-DASHBOARD -->
  <section id="attendanceSection" class="hidden">
   <div class="card">
    <div class="toolbar" style="margin-bottom:14px; gap:12px;">
@@ -357,7 +358,7 @@ button{cursor:pointer;border:0}
     <label style="font-size:13px;font-weight:700">To Date:</label>
     <input id="attendanceToDate" type="date" onchange="renderAttendance()" oninput="renderAttendance()">
     <input id="searchAttendanceAgent" placeholder="Search agent name/username..." oninput="renderAttendance()">
-    <button class="secondary" onclick="exportAttendanceCSV()">Export Attendance CSV</button>
+    <button class="secondary managerOnly" onclick="exportAttendanceCSV()">Export Attendance CSV</button>
    </div>
    <h3 style="margin-top:0">Agent Daily First Login & Last Logout Logs</h3>
    <div class="table-scroll"><table class="data-table"><thead><tr>
@@ -374,6 +375,58 @@ button{cursor:pointer;border:0}
    <div class="table-scroll"><table class="data-table"><thead><tr>
     <th>Name</th><th>Username</th><th>Email</th><th>Agency</th><th>Department</th><th>Queue</th><th>Shift</th><th>Role</th><th>Action</th>
    </tr></thead><tbody id="adminBody"></tbody></table></div>
+  </div>
+ </section>
+
+ <!-- SETTINGS TAB (ROLE MANAGEMENT & PERMISSIONS CONFIGURATION) -->
+ <section id="settingsSection" class="hidden">
+  <div class="card">
+   <h2 style="margin-top:0;margin-bottom:6px">System Role & Access Settings</h2>
+   <p style="color:var(--muted);font-size:13px;margin-top:0;margin-bottom:18px">
+    Configure end-to-end Read/Write permissions for WFM Admin, Team Leaders, Agents, and Custom System Roles.
+   </p>
+
+   <div style="display:grid;grid-template-columns:1fr 2fr;gap:18px">
+    <div style="background:#f8fafc;padding:16px;border-radius:12px;border:1px solid var(--border)">
+     <h3 style="margin-top:0;font-size:15px">Create New System Role</h3>
+     <div class="field">
+      <label>Role Key / ID</label>
+      <input id="newRoleKey" placeholder="e.g. team_leader">
+     </div>
+     <div class="field">
+      <label>Role Display Label</label>
+      <input id="newRoleLabel" placeholder="e.g. Team Leader">
+     </div>
+     <div class="field">
+      <label>Access Matrix Mode</label>
+      <select id="newRoleAccessMode">
+       <option value="write">Full Read & Write Access (WFM Admin)</option>
+       <option value="read">View & Download All Agents Access (Team Leader)</option>
+       <option value="agent">Self Only Access (Agent)</option>
+      </select>
+     </div>
+     <button class="primary" style="width:100%;margin-top:8px" onclick="createCustomRole()">+ Create & Save Role</button>
+    </div>
+
+    <div>
+     <h3 style="margin-top:0;font-size:15px">Configured Role Permissions Matrix</h3>
+     <div class="table-scroll">
+      <table class="data-table">
+       <thead>
+        <tr>
+         <th>Role Name</th>
+         <th>Role ID</th>
+         <th>Schedule Plotter</th>
+         <th>Reporting & Attendance</th>
+         <th>CSV / Excel Downloads</th>
+         <th>System Settings</th>
+        </tr>
+       </thead>
+       <tbody id="rolesTableBody"></tbody>
+      </table>
+     </div>
+    </div>
+   </div>
   </div>
  </section>
 </main>
@@ -431,17 +484,27 @@ const ALL_AUX = [...LIVE_DROPDOWN_AUX, ...LEAVE_SCHEDULE_AUX];
 const AGENCY_OPTIONS = ["internal", "external", "Radical Minds", "Concentrix", "CoinDCX"];
 const DEPARTMENT_OPTIONS = ["WFM", "CS Delivery", "Quality", "Training", "Process Excellence"];
 const QUEUE_OPTIONS = ["Livechat", "Email", "Calling Sales", "Onboarding Ops", "Verifiers/Auditors"];
-const ROLE_OPTIONS = ["Agent", "SME", "Team Lead", "QA", "Trainer", "admin"];
+
+/* DEFAULT SYSTEM ROLES DEFINITION */
+const defaultRoles = [
+ {key:"admin", label:"WFM Admin", accessMode:"write", canEdit:true, canViewAll:true, canDownload:true, canAdmin:true},
+ {key:"team_leader", label:"Team Leader", accessMode:"read", canEdit:false, canViewAll:true, canDownload:true, canAdmin:false},
+ {key:"agent", label:"Agent", accessMode:"agent", canEdit:false, canViewAll:false, canDownload:false, canAdmin:false}
+];
+
+function __safeParse(raw, fallback){ try { const parsed = JSON.parse(raw); return (parsed === null || parsed === undefined) ? fallback : parsed; } catch(e){ return fallback; }}
+
+let systemRoles = __safeParse(safeStorage.getItem("wfm_system_roles"), null) || defaultRoles;
+let ROLE_OPTIONS = systemRoles.map(r => r.label);
 
 const defaultUsers = [
  {id:"u1",name:"WFM Admin",username:"wfm@coindcx.com",email:"wfm@coindcx.com",password:"Admin@007",role:"admin",agency:"Internal",unit:"WFM",queue:"All",shift:"09:00-18:00",requirePasswordReset:false},
  {id:"u2",name:"Rahul Sharma",username:"agent001",email:"agent001@company.com",password:"Agent@123",role:"agent",agency:"RM",unit:"Support",queue:"Live Chat",shift:"08:00-17:00",requirePasswordReset:false},
  {id:"u3",name:"Priya Nair",username:"agent002",email:"agent002@company.com",password:"Agent@123",role:"agent",agency:"RM",unit:"Support",queue:"Email",shift:"11:00-20:00",requirePasswordReset:false},
  {id:"u4",name:"Amit Kumar",username:"agent003",email:"agent003@company.com",password:"Agent@123",role:"agent",agency:"CNX",unit:"Support",queue:"Live Chat",shift:"15:00-00:00",requirePasswordReset:false},
- {id:"u5",name:"Sneha Das",username:"agent004",email:"agent004@company.com",password:"Agent@123",role:"agent",agency:"FiveS",unit:"Support",queue:"Tickets",shift:"23:00-08:00",requirePasswordReset:false}
+ {id:"u5",name:"Sneha Das",username:"agent004",email:"agent004@company.com",password:"Agent@123",role:"agent",agency:"FiveS",unit:"Support",queue:"Tickets",shift:"23:00-08:00",requirePasswordReset:false},
+ {id:"u6",name:"Team Lead CS",username:"tl001",email:"tl001@company.com",password:"Agent@123",role:"team_leader",agency:"Internal",unit:"Support",queue:"All",shift:"09:00-18:00",requirePasswordReset:false}
 ];
-
-function __safeParse(raw, fallback){ try { const parsed = JSON.parse(raw); return (parsed === null || parsed === undefined) ? fallback : parsed; } catch(e){ return fallback; }}
 
 let users = __safeParse(safeStorage.getItem("wfm_users"), null) || defaultUsers;
 let continuousSchedules = __safeParse(safeStorage.getItem("wfm_continuous_schedules"), {});
@@ -460,15 +523,20 @@ let auxStartTime = Date.now();
 let targetPlotAgentId = null;
 
 function today(){ const d=new Date(); return d.toISOString().slice(0,10);}
-function saveAll(){ safeStorage.setItem("wfm_users",JSON.stringify(users)); safeStorage.setItem("wfm_continuous_schedules",JSON.stringify(continuousSchedules)); safeStorage.setItem("wfm_grid15m_schedules",JSON.stringify(grid15mSchedules)); safeStorage.setItem("wfm_aux_logs",JSON.stringify(auxLogs));}
+function saveAll(){ 
+ safeStorage.setItem("wfm_users",JSON.stringify(users)); 
+ safeStorage.setItem("wfm_continuous_schedules",JSON.stringify(continuousSchedules)); 
+ safeStorage.setItem("wfm_grid15m_schedules",JSON.stringify(grid15mSchedules)); 
+ safeStorage.setItem("wfm_aux_logs",JSON.stringify(auxLogs));
+ safeStorage.setItem("wfm_system_roles",JSON.stringify(systemRoles));
+}
 
 document.addEventListener("mousedown",()=>isMouseDown=true);
 document.addEventListener("mouseup",()=>isMouseDown=false);
 
-/* REAL-TIME CROSS-TAB STORAGE EVENT LISTENER FOR INSTANT AGENT STATUS UPDATES */
 window.addEventListener("storage", (e) => {
  if(e.key === "wfm_live_agent_status" || e.key === "wfm_aux_logs"){
-  if(currentUser && currentUser.role === "admin"){
+  if(currentUser && isManagerOrAdmin()){
    renderDashboard();
    renderAttendance();
   }
@@ -526,7 +594,7 @@ function login(){
 
  if(!found){
   const userHasSchedules = Object.keys(continuousSchedules).some(k => k.toLowerCase().includes(u));
-  if(userHasSchedules || u.includes("@") || u.startsWith("agent")){
+  if(userHasSchedules || u.includes("@") || u.startsWith("agent") || u.startsWith("tl")){
    const cleanName = u.split("@")[0].replace("external-","").replace("."," ").replace(/\b\w/g, l => l.toUpperCase());
    found = {
     id: "u_" + Date.now(),
@@ -534,7 +602,7 @@ function login(){
     username: uInput,
     email: u.includes("@") ? uInput : uInput + "@company.com",
     password: pInput || "Agent@123",
-    role: "agent",
+    role: u.startsWith("tl") ? "team_leader" : "agent",
     agency: "External",
     unit: "Support",
     queue: "Live Chat",
@@ -552,8 +620,8 @@ function login(){
  }
 
  if(found.password !== pInput){
-  if((pInput === "Admin@007" || pInput === "Wfm@123") && found.role === "admin"){ found.password = pInput; saveAll(); }
-  else if((pInput === "CoinDCX@135" || pInput === "Agent@123") && found.role === "agent"){ found.password = pInput; saveAll(); }
+  if((pInput === "Admin@007" || pInput === "Wfm@123") && (found.role === "admin" || found.role === "wfm_admin")){ found.password = pInput; saveAll(); }
+  else if((pInput === "CoinDCX@135" || pInput === "Agent@123")){ found.password = pInput; saveAll(); }
   else { 
    document.getElementById("loginError").textContent = "Invalid password. Please try again or use 'Reset Password?'."; 
    return; 
@@ -585,7 +653,7 @@ function submitFirstLoginChange(){
 function initializeAppView(){
  document.getElementById("loginScreen").classList.add("hidden");
  document.getElementById("app").classList.remove("hidden");
- document.getElementById("roleBadge").textContent=currentUser.role.toUpperCase();
+ document.getElementById("roleBadge").textContent=(getRoleObj(currentUser.role)?.label || currentUser.role).toUpperCase();
  document.getElementById("topUser").textContent=currentUser.name;
  document.getElementById("scheduleDate").value=selectedDate;
  document.getElementById("reportDate").value=selectedDate;
@@ -613,8 +681,9 @@ function initializeAppView(){
  renderAgentHistory();
  renderDashboard();
  renderAdmin();
+ renderSettings();
  startClock();
- showTab(currentUser.role==="agent"?"agent":"plot");
+ showTab(isManagerOrAdmin() ? "plot" : "agent");
 }
 
 function openResetModal(){
@@ -748,7 +817,7 @@ function changeActiveAux(key, preservedStartTime){
  document.getElementById("pillText").textContent = a?.label || "Unavailable";
  updateLiveTimer();
  renderAgentHistory();
- if(currentUser && currentUser.role === "admin"){ renderDashboard(); }
+ if(currentUser && isManagerOrAdmin()){ renderDashboard(); }
 }
 
 function logAuxSession(userId, date, auxKey, start, end, durationSec){
@@ -778,7 +847,7 @@ function updateLiveTimer(){
   document.getElementById("currentTimer").textContent=formattedTime;
   const histDate = document.getElementById("historyDate") ? document.getElementById("historyDate").value : today();
   if(histDate === today()){ renderAgentHistory(); }
-  if(currentUser.role === "admin"){
+  if(isManagerOrAdmin()){
    renderDashboard();
    const attSection = document.getElementById("attendanceSection");
    if(attSection && !attSection.classList.contains("hidden")){ renderAttendance(); }
@@ -828,9 +897,9 @@ function getAgentScheduleDates(agentId){
 function renderPlot(){
  const date=document.getElementById("scheduleDate").value||today();
  selectedDate=date;
- let agents=users.filter(u=>u.role==="agent");
+ let agents=users.filter(u=>u.role==="agent" || u.role==="team_leader");
 
- if(currentUser && currentUser.role!=="admin"){
+ if(currentUser && !isManagerOrAdmin()){
   const targetAgent = agents.find(u=>u.id===currentUser.id || u.username.toLowerCase()===currentUser.username.toLowerCase());
   if(!targetAgent) return;
   const agentDates = getAgentScheduleDates(targetAgent.id);
@@ -917,7 +986,7 @@ function renderContinuousTimelineView(agents, date){
  agents.forEach(agent=>{
   const lbl=document.createElement("div");
   lbl.className="agent-row-label";
-  lbl.innerHTML=`<div class="agent-info"><div class="agent-name">${esc(agent.name)}</div> <div class="agent-meta">${esc(agent.agency)} • ${esc(agent.queue)}</div></div> ${currentUser.role==="admin"?` <div style="display:flex;gap:4px"> <button class="secondary" style="padding:4px 8px;font-size:10px;font-weight:bold" onclick="copySchedule('${agent.id}')">Copy</button> <button class="primary" style="padding:4px 8px;font-size:10px;font-weight:bold" onclick="pasteSchedule('${agent.id}')">Paste</button> <button class="danger" style="padding:4px 8px;font-size:10px;font-weight:bold;background:#dc2626" onclick="clearAgentDaySchedule('${agent.id}', '${date}')">Clear</button> </div>`:""}`;
+  lbl.innerHTML=`<div class="agent-info"><div class="agent-name">${esc(agent.name)}</div> <div class="agent-meta">${esc(agent.agency)} • ${esc(agent.queue)}</div></div> ${isWriteAdmin()?` <div style="display:flex;gap:4px"> <button class="secondary" style="padding:4px 8px;font-size:10px;font-weight:bold" onclick="copySchedule('${agent.id}')">Copy</button> <button class="primary" style="padding:4px 8px;font-size:10px;font-weight:bold" onclick="pasteSchedule('${agent.id}')">Paste</button> <button class="danger" style="padding:4px 8px;font-size:10px;font-weight:bold;background:#dc2626" onclick="clearAgentDaySchedule('${agent.id}', '${date}')">Clear</button> </div>`:""}`;
   labelsCol.appendChild(lbl);
 
   const track=document.createElement("div");
@@ -927,7 +996,7 @@ function renderContinuousTimelineView(agents, date){
   for(let h=0; h<24; h++){ const gh=document.createElement("div"); gh.className="grid-hour"; bgGrid.appendChild(gh); }
   track.appendChild(bgGrid);
 
-  if(currentUser.role==="admin"){
+  if(isWriteAdmin()){
    track.ondragover=(e)=>e.preventDefault();
    track.ondrop=(e)=>{
     e.preventDefault();
@@ -950,8 +1019,8 @@ function renderContinuousTimelineView(agents, date){
    blockEl.className=`aux-block ${blk.auxKey}`;
    blockEl.style.left=blk.startMin+"px";
    blockEl.style.width=(blk.endMin-blk.startMin)+"px";
-   blockEl.innerHTML=`<span>${a?.short||""} ${timeLabel(blk.startMin)}-${timeLabel(blk.endMin)}</span> ${currentUser.role==="admin"?`<span class="delete-btn" title="Delete AUX Block" onclick="deleteAuxBlock(event, '${agent.id}', '${date}', ${idx})">✕</span>`:""}`;
-   if(currentUser.role==="admin"){
+   blockEl.innerHTML=`<span>${a?.short||""} ${timeLabel(blk.startMin)}-${timeLabel(blk.endMin)}</span> ${isWriteAdmin()?`<span class="delete-btn" title="Delete AUX Block" onclick="deleteAuxBlock(event, '${agent.id}', '${date}', ${idx})">✕</span>`:""}`;
+   if(isWriteAdmin()){
     blockEl.onmousedown=(e)=>{
      if(e.target.classList.contains("delete-btn")) return;
      e.stopPropagation();
@@ -962,7 +1031,7 @@ function renderContinuousTimelineView(agents, date){
    track.appendChild(blockEl);
   });
 
-  if(currentUser.role==="admin"){
+  if(isWriteAdmin()){
    track.ondblclick=(e)=>{
     if(e.target!==track && !e.target.classList.contains("timeline-grid-overlay")) return;
     const rect=track.getBoundingClientRect();
@@ -1008,14 +1077,14 @@ function render15mGridView(agents, date){
 
  agents.forEach(agent=>{
   const ac=document.createElement("div");ac.className="agent-row-label";
-  ac.innerHTML=`<div class="agent-info"><div class="agent-name">${esc(agent.name)}</div> <div class="agent-meta">${esc(agent.agency)} • ${esc(agent.queue)}</div></div> ${currentUser.role==="admin"?` <div style="display:flex;gap:4px"> <button class="secondary" style="padding:4px 8px;font-size:10px;font-weight:bold" onclick="copySchedule('${agent.id}')">Copy</button> <button class="primary" style="padding:4px 8px;font-size:10px;font-weight:bold" onclick="pasteSchedule('${agent.id}')">Paste</button> </div>`:""}`;
+  ac.innerHTML=`<div class="agent-info"><div class="agent-name">${esc(agent.name)}</div> <div class="agent-meta">${esc(agent.agency)} • ${esc(agent.queue)}</div></div> ${isWriteAdmin()?` <div style="display:flex;gap:4px"> <button class="secondary" style="padding:4px 8px;font-size:10px;font-weight:bold" onclick="copySchedule('${agent.id}')">Copy</button> <button class="primary" style="padding:4px 8px;font-size:10px;font-weight:bold" onclick="pasteSchedule('${agent.id}')">Paste</button> </div>`:""}`;
   container.appendChild(ac);
   const day=get15mGridSchedule(agent.id, date);
   for(let i=0;i<96;i++){
    const c=document.createElement("div"); const key=day[i];
    c.className="aux-cell-15m "+(key||"empty"); c.textContent=key?(auxByKey(key)?.short||""):"";
    c.title=`${timeLabel15m(i)} - ${auxByKey(key)?.label||"Unplotted"}`;
-   if(currentUser.role==="admin"){
+   if(isWriteAdmin()){
     c.onmousedown=()=>{set15mSlot(agent.id, date, i, selectedAux)};
     c.onmouseenter=()=>{if(isMouseDown)set15mSlot(agent.id, date, i, selectedAux)};
     c.oncontextmenu=(e)=>{e.preventDefault(); set15mSlot(agent.id, date, i, "")};
@@ -1062,9 +1131,9 @@ function pasteSchedule(targetAgentId){
 }
 
 function clearWholeDaySchedule(){
- if(currentUser.role!=="admin")return;
+ if(!isWriteAdmin())return;
  if(!confirm(`Are you sure you want to clear ALL agent schedules for ${selectedDate}?`)) return;
- const agents = users.filter(u=>u.role==="agent");
+ const agents = users.filter(u=>u.role==="agent" || u.role==="team_leader");
  agents.forEach(agent=>{
   continuousSchedules[dayKey(selectedDate, agent.id)] = [];
   grid15mSchedules[dayKey(selectedDate, agent.id)] = Array(96).fill("");
@@ -1074,7 +1143,7 @@ function clearWholeDaySchedule(){
 }
 
 function clearSelectedAgent(){
- if(currentUser.role!=="admin")return;
+ if(!isWriteAdmin())return;
  const inputName = prompt("Enter Agent Name, Username, or Email to clear schedule for " + selectedDate + ":");
  if(!inputName || !inputName.trim()) return;
  const q = inputName.trim().toLowerCase();
@@ -1091,7 +1160,7 @@ function clearSelectedAgent(){
 }
 
 function clearAgentDaySchedule(agentId, dateStr){
- if(currentUser.role!=="admin")return;
+ if(!isWriteAdmin())return;
  const agent = users.find(u=>u.id===agentId || u.username===agentId || u.email===agentId);
  continuousSchedules[dayKey(dateStr, agentId)] = [];
  grid15mSchedules[dayKey(dateStr, agentId)] = Array(96).fill("");
@@ -1108,7 +1177,7 @@ function clearAgentDaySchedule(agentId, dateStr){
 }
 
 function clearEntireDatabaseSchedules(){
- if(currentUser.role!=="admin")return;
+ if(!isWriteAdmin())return;
  if(!confirm("CRITICAL WARNING: Are you sure you want to PERMANENTLY ERASE ALL SCHEDULES across ALL uploaded dates for ALL agents in the system?")) return;
  if(!confirm("Please confirm a second time to wipe the schedule database:")) return;
  continuousSchedules = {};
@@ -1406,11 +1475,10 @@ function renderAgentHistory(){
  document.getElementById("agentUsageTable").innerHTML=rows;
 }
 
-/* REAL-TIME DYNAMIC REPORTING DASHBOARD UPDATE */
 function renderDashboard(){
- if(!currentUser||currentUser.role!=="admin")return;
+ if(!currentUser||!isManagerOrAdmin())return;
  const date=document.getElementById("reportDate").value||today();
- const agents=users.filter(u=>u.role==="agent");
+ const agents=users.filter(u=>u.role==="agent" || u.role==="team_leader");
  let liveStatus = JSON.parse(safeStorage.getItem("wfm_live_agent_status") || "{}");
  let online=0,availableSec=0,breakSec=0;
  let rows="";
@@ -1469,7 +1537,7 @@ function getDateRangeArray(startDateStr, endDateStr) {
 }
 
 function renderAttendance(){
- if(!currentUser||currentUser.role!=="admin")return;
+ if(!currentUser||!isManagerOrAdmin())return;
  let fromVal = document.getElementById("attendanceFromDate")?.value;
  let toVal = document.getElementById("attendanceToDate")?.value;
  
@@ -1478,7 +1546,7 @@ function renderAttendance(){
 
  const dateList = getDateRangeArray(fromVal, toVal);
  const search = (document.getElementById("searchAttendanceAgent")?.value || "").toLowerCase();
- const agents = users.filter(u=>u.role==="agent");
+ const agents = users.filter(u=>u.role==="agent" || u.role==="team_leader");
 
  let rows = "";
  dateList.forEach(date => {
@@ -1514,7 +1582,7 @@ function exportAttendanceCSV(){
  const dateList = getDateRangeArray(fromInput, toInput);
 
  const lines = [["Agent Name","Username/Email","Start Date","End Date","Assigned Shift","First Available Timestamp","Last Offline Timestamp"].join(",")];
- const agents = users.filter(u=>u.role==="agent");
+ const agents = users.filter(u=>u.role==="agent" || u.role==="team_leader");
 
  dateList.forEach(date => {
   agents.forEach(a => {
@@ -1584,13 +1652,13 @@ function updateAdminUserField(userId, fieldName, newValue){
 }
 
 function renderAdmin(){
- if(!currentUser||currentUser.role!=="admin")return;
+ if(!currentUser||!isWriteAdmin())return;
  document.getElementById("adminBody").innerHTML=users.map(u=>{
   const currAgency = u.agency || "internal";
   const currDept = u.department || u.unit || "WFM";
   const currQueue = u.queue || "Livechat";
   const currShift = u.shift || "09:00-18:00";
-  const currRole = u.role || "Agent";
+  const currRoleKey = u.role || "agent";
 
   let agencyOpts = AGENCY_OPTIONS.map(opt => `<option value="${esc(opt)}" ${opt.toLowerCase()===currAgency.toLowerCase()?'selected':''}>${esc(opt)}</option>`).join("");
   if(!AGENCY_OPTIONS.some(opt => opt.toLowerCase() === currAgency.toLowerCase())){ agencyOpts += `<option value="${esc(currAgency)}" selected>${esc(currAgency)}</option>`; }
@@ -1605,11 +1673,55 @@ function renderAdmin(){
   let shiftOpts = availableShifts.map(opt => `<option value="${esc(opt)}" ${opt.toLowerCase()===currShift.toLowerCase()?'selected':''}>${esc(opt)}</option>`).join("");
   if(!availableShifts.some(opt => opt.toLowerCase() === currShift.toLowerCase())){ shiftOpts += `<option value="${esc(currShift)}" selected>${esc(currShift)}</option>`; }
 
-  let roleOpts = ROLE_OPTIONS.map(opt => `<option value="${esc(opt)}" ${opt.toLowerCase()===currRole.toLowerCase()?'selected':''}>${esc(opt)}</option>`).join("");
-  if(!ROLE_OPTIONS.some(opt => opt.toLowerCase() === currRole.toLowerCase())){ roleOpts += `<option value="${esc(currRole)}" selected>${esc(currRole)}</option>`; }
+  let roleOpts = systemRoles.map(r => `<option value="${esc(r.key)}" ${r.key===currRoleKey?'selected':''}>${esc(r.label)}</option>`).join("");
 
   return `<tr> <td><b>${esc(u.name)}</b></td> <td>${esc(u.username)}</td> <td>${esc(u.email||"-")}</td> <td><select style="padding:4px 8px;border-radius:6px;border:1px solid #cbd5e1;font-weight:600" onchange="updateAdminUserField('${u.id}', 'agency', this.value)">${agencyOpts}</select></td> <td><select style="padding:4px 8px;border-radius:6px;border:1px solid #cbd5e1;font-weight:600" onchange="updateAdminUserField('${u.id}', 'department', this.value)">${deptOpts}</select></td> <td><select style="padding:4px 8px;border-radius:6px;border:1px solid #cbd5e1;font-weight:600" onchange="updateAdminUserField('${u.id}', 'queue', this.value)">${queueOpts}</select></td> <td><select style="padding:4px 8px;border-radius:6px;border:1px solid #cbd5e1;font-weight:600" onchange="updateAdminUserField('${u.id}', 'shift', this.value)">${shiftOpts}</select></td> <td><select style="padding:4px 8px;border-radius:6px;border:1px solid #cbd5e1;font-weight:600" onchange="updateAdminUserField('${u.id}', 'role', this.value)">${roleOpts}</select></td> <td><button class="danger" style="padding:4px 10px;font-size:11px" onclick="deleteAgent('${u.id}')">Delete</button> <button class="secondary" style="padding:4px 10px;font-size:11px" onclick="editPassword('${u.id}')">Password</button></td> </tr>`;
  }).join("");
+}
+
+/* SETTINGS & ROLE MANAGEMENT LOGIC */
+function renderSettings(){
+ if(!currentUser||!isWriteAdmin())return;
+ const tbody = document.getElementById("rolesTableBody");
+ tbody.innerHTML = systemRoles.map(r => {
+  return `<tr>
+   <td><b>${esc(r.label)}</b></td>
+   <td><code>${esc(r.key)}</code></td>
+   <td>${r.accessMode==='write' ? '<span style="color:#15803d;font-weight:bold">Read & Write (Full Edit)</span>' : '<span style="color:#1d4ed8;font-weight:bold">Read Only (All Agents)</span>'}</td>
+   <td>${r.accessMode==='agent' ? '<span style="color:#64748b">Self Only</span>' : '<span style="color:#15803d;font-weight:bold">All Agents Summary</span>'}</td>
+   <td>${r.canDownload ? '<span style="color:#15803d;font-weight:bold">Enabled</span>' : '<span style="color:#ef4444;font-weight:bold">Disabled</span>'}</td>
+   <td>${r.canAdmin ? '<span style="color:#15803d;font-weight:bold">Full Admin</span>' : '<span style="color:#64748b">No Access</span>'}</td>
+  </tr>`;
+ }).join("");
+}
+
+function createCustomRole(){
+ if(!isWriteAdmin()) return alert("Only WFM Admin can create system roles.");
+ const key = document.getElementById("newRoleKey").value.trim().toLowerCase().replace(/\s+/g, "_");
+ const label = document.getElementById("newRoleLabel").value.trim();
+ const accessMode = document.getElementById("newRoleAccessMode").value;
+
+ if(!key || !label){ return alert("Please enter both Role Key/ID and Role Display Label."); }
+ if(systemRoles.some(r => r.key === key)){ return alert("A role with key '" + key + "' already exists."); }
+
+ const newRole = {
+  key: key,
+  label: label,
+  accessMode: accessMode,
+  canEdit: (accessMode === "write"),
+  canViewAll: (accessMode === "write" || accessMode === "read"),
+  canDownload: (accessMode === "write" || accessMode === "read"),
+  canAdmin: (accessMode === "write")
+ };
+
+ systemRoles.push(newRole);
+ ROLE_OPTIONS = systemRoles.map(r => r.label);
+ saveAll();
+ renderSettings();
+ renderAdmin();
+ document.getElementById("newRoleKey").value = "";
+ document.getElementById("newRoleLabel").value = "";
+ alert("Role '" + label + "' created and saved successfully!");
 }
 
 function editPassword(id){
@@ -1642,7 +1754,7 @@ function deleteAgent(id){
 function exportCSV(){
  const date=document.getElementById("scheduleDate").value||today();
  const lines=[["Date","Agent Name","Username","Agency","Unit","Queue","AUX","Start Time","End Time","Duration (Sec)"].join(",")];
- users.filter(u=>u.role==="agent").forEach(a=>{
+ users.filter(u=>u.role==="agent" || u.role==="team_leader").forEach(a=>{
   const logs=auxLogs[date+"_"+a.id]||[];
   logs.forEach(l=>{
    const aux=auxByKey(l.auxKey);
@@ -1674,26 +1786,51 @@ function logout(){
  document.getElementById("loginScreen").classList.remove("hidden");
 }
 
+/* HELPER PERMISSION EVALUATORS */
+function getRoleObj(roleKey){
+ return systemRoles.find(r => r.key === roleKey) || {key:roleKey, label:roleKey, accessMode:(roleKey==="admin"?"write":"agent")};
+}
+
+function isWriteAdmin(){
+ if(!currentUser) return false;
+ if(currentUser.role === "admin" || currentUser.role === "wfm_admin") return true;
+ const r = getRoleObj(currentUser.role);
+ return r.canEdit || r.canAdmin || r.accessMode === "write";
+}
+
+function isManagerOrAdmin(){
+ if(!currentUser) return false;
+ if(currentUser.role === "admin" || currentUser.role === "team_leader" || currentUser.role === "wfm_admin") return true;
+ const r = getRoleObj(currentUser.role);
+ return r.canViewAll || r.accessMode === "read" || r.accessMode === "write";
+}
+
 function applyPermissions(){
- const isAdmin=currentUser.role==="admin";
- document.querySelectorAll(".adminOnly").forEach(x=>x.classList.toggle("hidden",!isAdmin));
- document.getElementById("adminTab").classList.toggle("hidden",!isAdmin);
- document.getElementById("dashboardTab").classList.toggle("hidden",!isAdmin);
- document.getElementById("attendanceTab").classList.toggle("hidden",!isAdmin);
+ const writeAdmin = isWriteAdmin();
+ const viewAll = isManagerOrAdmin();
+
+ document.querySelectorAll(".adminOnly").forEach(x=>x.classList.toggle("hidden", !writeAdmin));
+ document.querySelectorAll(".managerOnly").forEach(x=>x.classList.toggle("hidden", !viewAll));
+
+ document.getElementById("adminTab").classList.toggle("hidden", !writeAdmin);
+ document.getElementById("settingsTab").classList.toggle("hidden", !writeAdmin);
+ document.getElementById("dashboardTab").classList.toggle("hidden", !viewAll);
+ document.getElementById("attendanceTab").classList.toggle("hidden", !viewAll);
 }
 
 function showTab(tab){
- ["plot","agent","dashboard","attendance","admin"].forEach(t=>{
+ ["plot","agent","dashboard","attendance","admin","settings"].forEach(t=>{
   const el = document.getElementById(t+"Section");
-  if(el) el.classList.toggle("hidden",t!==tab);
+  if(el) el.classList.toggle("hidden", t!==tab);
   const btn = document.getElementById(t+"Tab");
-  if(btn) btn.classList.toggle("active",t===tab);
+  if(btn) btn.classList.toggle("active", t===tab);
  });
  if(tab==="plot")renderPlot();
  if(tab==="agent")renderAgentHistory();
  if(tab==="dashboard")renderDashboard();
  if(tab==="attendance")renderAttendance();
  if(tab==="admin")renderAdmin();
+ if(tab==="settings")renderSettings();
 }
 
 function renderLegend(){
@@ -1703,9 +1840,9 @@ function renderLegend(){
   const s=document.createElement("span");
   s.className=a.key;
   s.textContent=a.label;
-  s.draggable=currentUser.role==="admin";
+  s.draggable=isWriteAdmin();
   s.ondragstart=(e)=>e.dataTransfer.setData("text/plain", a.key);
-  if(currentUser.role==="admin"){
+  if(isWriteAdmin()){
    s.onclick=()=>{selectedAux=a.key;document.querySelectorAll(".legend span").forEach(x=>x.style.outline="");s.style.outline="3px solid #111"};
   }
   box.appendChild(s);
@@ -1713,8 +1850,8 @@ function renderLegend(){
 }
 
 function populateFilters(){
- const agencies=[...new Set(users.filter(u=>u.role==="agent").map(u=>u.agency))];
- const queues=[...new Set(users.filter(u=>u.role==="agent").map(u=>u.queue))];
+ const agencies=[...new Set(users.filter(u=>u.role==="agent" || u.role==="team_leader").map(u=>u.agency))];
+ const queues=[...new Set(users.filter(u=>u.role==="agent" || u.role==="team_leader").map(u=>u.queue))];
  document.getElementById("agencyFilter").innerHTML='<option value="">All Agencies</option>'+agencies.map(x=>`<option>${esc(x)}</option>`).join("");
  document.getElementById("queueFilter").innerHTML='<option value="">All Queues</option>'+queues.map(x=>`<option>${esc(x)}</option>`).join("");
 }
