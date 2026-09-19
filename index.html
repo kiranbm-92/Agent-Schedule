@@ -149,22 +149,29 @@ let currentUser = null;let selectedAux = "available";let selectedDate = today();
       if (navigator.geolocation) {        navigator.geolocation.getCurrentPosition(          (pos) => {            const lat = pos.coords.latitude;            const lon = pos.coords.longitude;            // Reverse Geocode via OpenStreetMap
             fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=18&addressdetails=1`)              .then(res => res.json())              .then(geo => {                const addr = geo.address || {};                const neighborhood = addr.suburb || addr.neighbourhood || addr.residential || addr.subdistrict || addr.quarter || addr.locality || "";                const city = addr.city || addr.town || addr.district || "Bengaluru";                const state = addr.state || "Karnataka";                const country = addr.country || "India";
                 const preciseLoc = neighborhood ? `${neighborhood}, ${city}, ${state}` : `${city}, ${state}, ${country}`;                recordEntry(publicIp, preciseLoc);              })              .catch(() => recordEntry(publicIp, fallbackLoc));          },          (err) => {            recordEntry(publicIp, fallbackLoc);          },          { timeout: 8000, enableHighAccuracy: true }        );      } else {        recordEntry(publicIp, fallbackLoc);      }    })    .catch(() => {      recordEntry("103.156.19.45", "Bengaluru, Karnataka, India");    });}
-/* INACTIVITY MONITORING ENGINE (5 MINUTES THRESHOLD, ONLY WHILE AUX = AVAILABLE, AND ONLY WHILE THIS TAB/WINDOW IS ACTUALLY THE ONE ON SCREEN) */let lastActivityTime = Date.now();let activeInactivitySession = null;const INACTIVITY_THRESHOLD_MS = 5 * 60 * 1000; // 5 Minutes
+/* INACTIVITY MONITORING ENGINE (5 MINUTES THRESHOLD, ONLY WHILE AUX = AVAILABLE)
+   Two ways idle time is detected:
+   1. No mouse/keyboard/touch/scroll interaction on this tab for 5+ minutes, while the tab IS visible
+      and focused -- classic "sitting on this screen doing nothing" idle.
+   2. The tab has been HIDDEN or UNFOCUSED for 5+ continuous minutes -- this deliberately does NOT
+      fire instantly on every tab switch (a brief glance at another tab/app is not penalized), but a
+      screen lock, sleep, or genuinely long time away IS caught, because it looks identical to a tab
+      switch from the browser's perspective and must not be invisible to adherence tracking. */
+let lastActivityTime = Date.now();let activeInactivitySession = null;let hiddenSince = null;const INACTIVITY_THRESHOLD_MS = 5 * 60 * 1000; // 5 Minutes
 function closeInactivitySessionIfOpen(){   if(currentUser && activeInactivitySession){      const now = Date.now();      const startT = activeInactivitySession.startTime;      const durationSec = Math.round((now - startT) / 1000);      if(durationSec >= 300){ logInactivityPeriod(currentUser.username.toLowerCase(), today(), startT, now, durationSec); }      activeInactivitySession = null;   }}
 function resetInactivityTimer() {   closeInactivitySessionIfOpen();   lastActivityTime = Date.now();}
-function checkInactivityState() {   const now = Date.now();
-   // Only count time as inactive when: logged in, AUX is Available, AND this browser tab is actually visible AND focused.
-   // If the tab is hidden (switched to another tab) or the window has lost focus (switched to another application),
-   // the person may well be doing legitimate work elsewhere — that must NOT be counted as inactivity.
-   const windowIsActiveOnScreen = !document.hidden && document.hasFocus();   if (currentUser && currentActiveAux === "available" && windowIsActiveOnScreen) {      const idleTime = now - lastActivityTime;      if (idleTime >= INACTIVITY_THRESHOLD_MS && !activeInactivitySession) {         // Mark start of idle session
-      activeInactivitySession = {        startTime: lastActivityTime      };    }  }}
+function handleWindowBlurOrHidden(){   if(hiddenSince === null){ hiddenSince = Date.now(); }}
+function handleWindowFocusOrVisible(){   hiddenSince = null;   resetInactivityTimer();}
+function checkInactivityState() {   const now = Date.now();   if (!currentUser || currentActiveAux !== "available") return;
+   const windowIsActiveOnScreen = !document.hidden && document.hasFocus();
+   if (windowIsActiveOnScreen) {      const idleTime = now - lastActivityTime;      if (idleTime >= INACTIVITY_THRESHOLD_MS && !activeInactivitySession) {         activeInactivitySession = { startTime: lastActivityTime };      }   } else if (hiddenSince !== null) {      const hiddenDuration = now - hiddenSince;      if (hiddenDuration >= INACTIVITY_THRESHOLD_MS && !activeInactivitySession) {         activeInactivitySession = { startTime: hiddenSince };      }   }}
 function logInactivityPeriod(userId, dateStr, startMs, endMs, durationSec) {  syncStorageData();  const key = dateStr + "_" + userId.toLowerCase();  if (!inactivityLogs[key]) inactivityLogs[key] = [];
   inactivityLogs[key].push({    startTime: new Date(startMs).toLocaleTimeString("en-IN", { hour12: false }),    endTime: new Date(endMs).toLocaleTimeString("en-IN", { hour12: false }),    durationSec: durationSec  });  saveAll();}
 // User Interaction Listeners tracking activity within this tab
 ['mousemove', 'mousedown', 'keydown', 'scroll', 'touchstart'].forEach(evt => {  window.addEventListener(evt, resetInactivityTimer, { passive: true });});
-// Switching to another tab or another application counts as ACTIVE, not idle: close out any in-progress idle
-// session the instant focus/visibility changes, and restart the idle clock fresh once this tab is back on screen.
-document.addEventListener('visibilitychange', resetInactivityTimer);window.addEventListener('blur', resetInactivityTimer);window.addEventListener('focus', resetInactivityTimer);
+document.addEventListener('visibilitychange', () => { if(document.hidden){ handleWindowBlurOrHidden(); } else { handleWindowFocusOrVisible(); } });
+window.addEventListener('blur', handleWindowBlurOrHidden);
+window.addEventListener('focus', handleWindowFocusOrVisible);
 setInterval(checkInactivityState, 5000);
 function today(){ const d=new Date(); return d.toISOString().slice(0,10);}
 function syncStorageData(){   users = __safeParse(safeStorage.getItem("wfm_users"), users);   if(!users || users.length === 0){ users = defaultUsers; }  continuousSchedules = __safeParse(safeStorage.getItem("wfm_continuous_schedules"), continuousSchedules);   grid15mSchedules = __safeParse(safeStorage.getItem("wfm_grid15m_schedules"), grid15mSchedules);   auxLogs = __safeParse(safeStorage.getItem("wfm_aux_logs"), auxLogs);   inactivityLogs = __safeParse(safeStorage.getItem("wfm_inactivity_logs"), inactivityLogs);  locationLogs = __safeParse(safeStorage.getItem("wfm_location_logs"), locationLogs);  callingLeads = __safeParse(safeStorage.getItem("wfm_calling_leads"), callingLeads);  systemRoles = __safeParse(safeStorage.getItem("wfm_system_roles"), systemRoles);}
