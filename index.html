@@ -285,7 +285,33 @@ function changeActiveAux(key, preservedStartTime){   const now = Date.now();   i
 function getDeviceType(){   try {      const ua = navigator.userAgent || "";      const isTablet = /iPad|Android(?!.*Mobile)|Tablet|Nexus 7|Nexus 10|KFAPWI/i.test(ua);      const isMobile = /iPhone|iPod|Android.*Mobile|Windows Phone|BlackBerry|Mobile Safari/i.test(ua);      if(isTablet) return "Tablet";      if(isMobile) return "Mobile";
       // Fallback: touch-capable + narrow viewport, in case UA was spoofed to look like desktop
       const touchCapable = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);      if(touchCapable && window.innerWidth <= 820) return "Mobile";      return "Desktop";   } catch(e){ return "Unknown"; }}
-function logAuxSession(userId, date, auxKey, start, end, durationSec){   syncStorageData();   const key=date+"_"+userId.toLowerCase();   if(!auxLogs[key]) auxLogs[key]=[];   auxLogs[key].push({ auxKey, startTime: new Date(start).toLocaleTimeString("en-IN", {hour12:false}), endTime: new Date(end).toLocaleTimeString("en-IN", {hour12:false}), durationSec: Math.round(durationSec), device: getDeviceType() });   saveAll();}
+function logAuxSession(userId, date, auxKey, start, end, durationSec){   syncStorageData();   const uid=userId.toLowerCase();
+   if(!(end > start)){      // No measurable elapsed time (or a clock-skew edge case) -- log a single entry
+      // under the given day, same as before.
+      const key=(date||today())+"_"+uid;      if(!auxLogs[key]) auxLogs[key]=[];      auxLogs[key].push({ auxKey, startTime: new Date(start).toLocaleTimeString("en-IN", {hour12:false}), endTime: new Date(end).toLocaleTimeString("en-IN", {hour12:false}), durationSec: Math.max(0, Math.round(durationSec||0)), device: getDeviceType() });      saveAll();      return;   }
+   // Split the session across any calendar-day boundary(ies) it spans, so each day's
+   // logs/Total Summary only count the portion of the session that actually happened
+   // on that day. Previously the ENTIRE duration was bucketed under a single `date`
+   // (whichever day the session happened to END on / whichever day it was when
+   // changeActiveAux ran) -- so a session that started the previous day but ended
+   // after midnight had its whole duration misattributed to the wrong day, which is
+   // what made the Total Summary sum up incorrectly.
+   let segStart = start;
+   while (segStart < end) {
+      const segStartD = new Date(segStart);
+      const segDateStr = segStartD.toISOString().slice(0,10);
+      const segDayEndMs = Date.UTC(segStartD.getUTCFullYear(), segStartD.getUTCMonth(), segStartD.getUTCDate()+1, 0, 0, 0, 0);
+      const segEnd = Math.min(end, segDayEndMs);
+      const segDurationSec = Math.round((segEnd - segStart) / 1000);
+      if (segDurationSec > 0) {
+         const key = segDateStr+"_"+uid;
+         if(!auxLogs[key]) auxLogs[key]=[];
+         auxLogs[key].push({ auxKey, startTime: new Date(segStart).toLocaleTimeString("en-IN", {hour12:false}), endTime: new Date(segEnd).toLocaleTimeString("en-IN", {hour12:false}), durationSec: segDurationSec, device: getDeviceType() });
+      }
+      segStart = segEnd;
+   }
+   saveAll();
+}
 function startClock(){   function tick(){      const d=new Date();      const dateStr = d.toLocaleDateString("en-IN", {day:"2-digit", month:"short", year:"numeric"});      const timeStr = d.toLocaleTimeString("en-IN", {hour12:false, hour:"2-digit", minute:"2-digit", second:"2-digit"});        const headerDateEl = document.getElementById("liveHeaderDate");      const liveClockEl = document.getElementById("liveClock");      if(headerDateEl) headerDateEl.textContent = dateStr;      if(liveClockEl) liveClockEl.textContent = timeStr;        updateLiveTimer();   }   tick();   if(timerInterval)clearInterval(timerInterval);   timerInterval=setInterval(tick,1000);}
 function updateLiveTimer(){   const elapsedSeconds=Math.floor((Date.now()-auxStartTime)/1000);   const formattedTime=fmt(elapsedSeconds);   document.getElementById("pillTimer").textContent=formattedTime;   if(currentUser){      document.getElementById("currentAux").textContent=auxByKey(currentActiveAux)?.label||"-";      document.getElementById("currentTimer").textContent=formattedTime;      const histDate = document.getElementById("historyDate") ? document.getElementById("historyDate").value : today();      if(histDate === today()){ renderAgentHistory(); }      if(isManagerOrAdmin()){         renderDashboard();         const attSection = document.getElementById("attendanceSection");         if(attSection && !attSection.classList.contains("hidden")){ renderAttendance(); }         const manageMenu = document.getElementById("manageAgentsMenu");         if(manageMenu && !manageMenu.classList.contains("hidden")){            const activeEl = document.activeElement;            const menuHasFocus = activeEl && manageMenu.contains(activeEl);            if(!menuHasFocus){ renderManageAgentsList(); }         }      }   }}
 function resetHistoryToToday(){ document.getElementById("historyDate").value=today(); renderAgentHistory();}
