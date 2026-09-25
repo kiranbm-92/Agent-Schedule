@@ -45,7 +45,7 @@
   const EMAILJS_IS_CONFIGURED = EMAILJS_PUBLIC_KEY !== "YOUR_PUBLIC_KEY" && EMAILJS_SERVICE_ID !== "YOUR_SERVICE_ID" && EMAILJS_TEMPLATE_ID !== "YOUR_TEMPLATE_ID";
   if (window.emailjs && EMAILJS_IS_CONFIGURED) { emailjs.init({ publicKey: EMAILJS_PUBLIC_KEY }); }
 </script>
-<!-- FIREBASE CLOUD FIRESTORE AUTO-SYNC MODULE --><script type="module">  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";  import { getFirestore, doc, setDoc, updateDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";  import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-functions.js";
+<!-- FIREBASE CLOUD FIRESTORE AUTO-SYNC MODULE --><script type="module">  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";  import { getFirestore, doc, setDoc, updateDoc, onSnapshot, FieldPath } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";  import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-functions.js";
   // REPLACE THIS BLOCK WITH YOUR CONFIG FROM FIREBASE CONSOLE PROJECT SETTINGS
   const firebaseConfig = {   apiKey: "AIzaSyCNeXrdwnxQYgB3O9UNZY7-6oiLojhs9MU",  authDomain: "coindcx-wfm-crm.firebaseapp.com",  projectId: "coindcx-wfm-crm",  storageBucket: "coindcx-wfm-crm.firebasestorage.app",  messagingSenderId: "78751965396",  appId: "1:78751965396:web:442b6c60d305e780c79b41"  };
   // Initialize Firebase & Cloud Firestore
@@ -108,7 +108,7 @@
             window.__lastHandledForceLogout = myStatus.forceLogoutAt;
             // Targeted field-path write: only this one agent's liveStatus.<key> entry is touched,
             // so we never clobber other agents' live AUX status with a stale full-map snapshot.
-            updateDoc(globalDocRef, { ["liveStatus." + myKey + ".forceLogout"]: false }).catch(()=>{});
+            updateDoc(globalDocRef, new FieldPath("liveStatus", myKey, "forceLogout"), false).catch(()=>{});
             alert("You have been logged out by " + (myStatus.forceLogoutBy || "a manager") + ".");
             if (typeof performLogout === 'function') performLogout();
           }
@@ -184,7 +184,13 @@
   window.pushLiveStatusField = async function(userKey, statusObj) {
     if (!userKey) return;
     try {
-      await updateDoc(globalDocRef, { ["liveStatus." + userKey]: statusObj });
+      // Use FieldPath with the key as its own path SEGMENT, not a dot-joined string. Almost every
+      // username/email contains a literal "." (e.g. "wfm@coindcx.com"), and a plain string like
+      // "liveStatus.wfm@coindcx.com" is parsed by Firestore as nested fields
+      // liveStatus -> "wfm@coindcx" -> "com" instead of the single literal key "wfm@coindcx.com".
+      // That silently misfiled every agent's live-status write, which is why cross-device/
+      // cross-browser AUX sync for the SAME account stopped working after the targeted-write fix.
+      await updateDoc(globalDocRef, new FieldPath("liveStatus", userKey), statusObj);
     } catch (e) {
       // Fails only if the shared document itself doesn't exist yet (first-ever save) --
       // fall back to a merge write scoped to just this one key, still never touching
