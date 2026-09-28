@@ -45,7 +45,7 @@
   const EMAILJS_IS_CONFIGURED = EMAILJS_PUBLIC_KEY !== "YOUR_PUBLIC_KEY" && EMAILJS_SERVICE_ID !== "YOUR_SERVICE_ID" && EMAILJS_TEMPLATE_ID !== "YOUR_TEMPLATE_ID";
   if (window.emailjs && EMAILJS_IS_CONFIGURED) { emailjs.init({ publicKey: EMAILJS_PUBLIC_KEY }); }
 </script>
-<!-- FIREBASE CLOUD FIRESTORE AUTO-SYNC MODULE --><script type="module">  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";  import { getFirestore, doc, setDoc, updateDoc, onSnapshot, FieldPath } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";  import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-functions.js";
+<!-- FIREBASE CLOUD FIRESTORE AUTO-SYNC MODULE --><script type="module">  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";  import { getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, onSnapshot, FieldPath } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";  import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-functions.js";
   // REPLACE THIS BLOCK WITH YOUR CONFIG FROM FIREBASE CONSOLE PROJECT SETTINGS
   const firebaseConfig = {   apiKey: "AIzaSyCNeXrdwnxQYgB3O9UNZY7-6oiLojhs9MU",  authDomain: "coindcx-wfm-crm.firebaseapp.com",  projectId: "coindcx-wfm-crm",  storageBucket: "coindcx-wfm-crm.firebasestorage.app",  messagingSenderId: "78751965396",  appId: "1:78751965396:web:442b6c60d305e780c79b41"  };
   // Initialize Firebase & Cloud Firestore
@@ -57,7 +57,62 @@
   // their own independent ~1MB budget each, so a big schedule upload no longer competes with log
   // history for the same size ceiling.
   const schedulesDocRef = doc(db, "wfm_store", "schedules");
-  const logsDocRef = doc(db, "wfm_store", "logs");
+  // LOGS ARE SHARDED BY CALENDAR WEEK instead of living in one document. Each week's AUX +
+  // inactivity logs (for every agent) get their own small Firestore document ("logs_2026-09-21"
+  // etc, keyed by the Monday that starts that week). WHY WEEKLY AND NOT MONTHLY: at ~35 agents with
+  // realistic AUX activity, one week of combined logs measures ~530KB -- comfortably under the 1MB
+  // cap -- but one MONTH of the same data measures ~2.2MB, more than DOUBLE the cap. Monthly
+  // sharding would still hit the exact same wall this fix exists to solve, just a bit later.
+  // Weekly sharding keeps every single document safely under 1MB even as the agent roster grows,
+  // which is what actually lets retention go from a risky 180 days (already exceeding 1MB within
+  // 2 weeks at 35 agents under the old single-document design) out to years of real history.
+  function logWeekDocRef(weekKey) { return doc(db, "wfm_store", "logs_" + weekKey); }
+  // Returns the local-calendar-date (YYYY-MM-DD) of the MONDAY that starts the week containing
+  // dateStr. Keying by the week's start date (rather than an ISO week NUMBER like "2026-W39")
+  // sidesteps ISO week-numbering edge cases at year boundaries and sorts correctly as a plain
+  // string, exactly like the day-keys used everywhere else in this app.
+  function weekKeyOf(dateStr) {
+    const parts = String(dateStr).slice(0, 10).split("-").map(Number);
+    const d = new Date(parts[0], parts[1] - 1, parts[2]);
+    const day = d.getDay(); // 0=Sun..6=Sat
+    const diffToMonday = (day === 0) ? -6 : (1 - day);
+    d.setDate(d.getDate() + diffToMonday);
+    return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  }
+  function localWeekKey(offsetWeeks) {
+    const d = new Date(); d.setDate(d.getDate() + (offsetWeeks || 0) * 7);
+    return weekKeyOf(d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"));
+  }
+  function weekKeysInRange(fromDateStr, toDateStr) {
+    try {
+      const out = [];
+      let cursor = weekKeyOf(fromDateStr);
+      const lastWeek = weekKeyOf(toDateStr);
+      let guard = 0;
+      while (cursor <= lastWeek && guard < 500) { // 500 weeks ~= 9.5 years, generous ceiling against bad input
+        out.push(cursor);
+        const parts = cursor.split("-").map(Number);
+        const d = new Date(parts[0], parts[1] - 1, parts[2] + 7);
+        cursor = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+        guard++;
+      }
+      return out;
+    } catch (e) { return []; }
+  }
+  // How many recent weeks stay live-synced (onSnapshot) and instantly available for the default
+  // "today" / typical "last several weeks" views without any extra fetch. Older weeks are fetched
+  // on demand the first time a report's date range actually reaches back that far (see
+  // window.ensureLogWeeksLoaded below) -- so 5+ years of retained history never has to be loaded
+  // all at once. 6 weeks comfortably covers a "last 30 days" style look-back with zero lazy-fetch
+  // delay even right after a week rolls over.
+  const LIVE_LOG_WEEKS_WINDOW = 6;
+  let logWeekIndex = []; // every week-start-date key that currently has a logs_<week> document in Firestore
+  let liveLogWeeks = [];  // the subset of logWeekIndex kept live-synced right now
+  const loadedLiveWeeks = new Set();
+  const historicalLoadAttempted = new Set();
+  window.__wfmHistoricalLogCache = { auxLogs: {}, inactivityLogs: {} }; // lazy-loaded OLDER months, read-only, never written back
+  let logWeekListenersStarted = false;
+  let logWeekMigrationAttempted = false;
 
   // Build/version marker: since this app is a single static HTML file distributed by re-uploading
   // to wherever it's hosted, browsers (and anyone still holding an old copy) can easily keep running
@@ -65,7 +120,7 @@
   // this to the console -- and showing it in the topbar (see initializeAppView) -- makes it possible
   // to confirm at a glance whether a given device is actually on the latest deployed build before
   // spending time debugging something that's really just a stale cache/old copy.
-  window.WFM_APP_BUILD = "2026-09-28-r7";
+  window.WFM_APP_BUILD = "2026-09-28-r8";
   console.log("WFM CRM build:", window.WFM_APP_BUILD);
   // Turns a raw Firestore error into a plain-English hint about WHICH of the common causes it is,
   // so the on-screen sync banner is self-diagnosing instead of just saying "sync failed".
@@ -91,31 +146,87 @@
   // throw and sendOTP() falls back to EmailJS, then to the on-screen demo popup.
   try {    const functionsInstance = getFunctions(app);    window.sendOtpEmailCloudFn = httpsCallable(functionsInstance, "sendOtpEmail");  } catch (e) {    console.error("Firebase Functions init error:", e);  }
 
-  const LOG_RETENTION_DAYS = 180; // keep this many days of AUX/inactivity/location logs in the shared doc. NOTE: everything lives in one 1MB Firestore document -- raising this raises the risk of hitting that size cap again at larger agent counts. Monitor document size in the Firebase console; if this becomes a problem, move logs to per-day/per-agent documents instead of shrinking this back down.
-  function pruneOldDatedLogs(logsObj, days) {
-    try {
-      const cutoff = new Date();
-      cutoff.setDate(cutoff.getDate() - days);
-      // Local date, not toISOString() (always UTC) -- keeps the retention cutoff aligned with the
-      // same local-calendar-day boundaries used everywhere else (today(), logAuxSession splitting).
-      const cutoffStr = `${cutoff.getFullYear()}-${String(cutoff.getMonth()+1).padStart(2,"0")}-${String(cutoff.getDate()).padStart(2,"0")}`;
-      const pruned = {};
-      Object.keys(logsObj || {}).forEach(key => {
-        const datePart = key.slice(0, 10); // "YYYY-MM-DD_..."
-        if (datePart >= cutoffStr) pruned[key] = logsObj[key];
-      });
-      return pruned;
-    } catch (e) { return logsObj || {}; }
-  }
+  // With logs sharded one-document-per-month (see above), retention is no longer size-constrained --
+  // a month document is the same small size whether you keep 30 days or 5 years of them. Retention
+  // now just controls how many old WEEK DOCUMENTS get deleted wholesale (see pruneOldLogWeeks),
+  // not how many individual entries get trimmed out of one shared blob.
+  const LOG_RETENTION_DAYS = 1825; // 5 years. Safe to raise further -- it no longer risks the 1MB cap.
 
   // Real-time Cloud Data Listener (Broadcasts edits, live AUX, inactivity, calling leads & IP logs)
   // Schedules now live in their own document (see note above) so a large Excel/CSV schedule
   // upload never competes with 180 days of logs for the same 1MB Firestore cap.
   onSnapshot(schedulesDocRef, (docSnap) => {    if (docSnap.exists()) {      const data = docSnap.data();      let changed = false;      if (data.continuousSchedules) { continuousSchedules = data.continuousSchedules; safeStorage.setItem("wfm_continuous_schedules", JSON.stringify(continuousSchedules)); changed = true; }      if (data.grid15mSchedules) { grid15mSchedules = data.grid15mSchedules; safeStorage.setItem("wfm_grid15m_schedules", JSON.stringify(grid15mSchedules)); changed = true; }      if (changed && typeof renderPlot === 'function' && typeof currentUser !== 'undefined' && currentUser) { renderPlot(); }    }  });
-  // AUX / inactivity / location logs now live in their own document (see note above), pruned
-  // independently of schedules and users so their own 1MB budget isn't shared with either.
-  onSnapshot(logsDocRef, (docSnap) => {    if (docSnap.exists()) {      const data = docSnap.data();      let changed = false;      if (data.auxLogs) { auxLogs = data.auxLogs; safeStorage.setItem("wfm_aux_logs", JSON.stringify(auxLogs)); changed = true; }      if (data.inactivityLogs) { inactivityLogs = data.inactivityLogs; safeStorage.setItem("wfm_inactivity_logs", JSON.stringify(inactivityLogs)); changed = true; }      if (changed && typeof currentUser !== 'undefined' && currentUser) {        if (typeof renderAgentHistory === 'function') renderAgentHistory();        if (typeof isManagerOrAdmin === 'function' && isManagerOrAdmin()) {          if (typeof renderDashboard === 'function') renderDashboard();          const attSection = document.getElementById("attendanceSection");          if (attSection && !attSection.classList.contains("hidden") && typeof renderAttendance === 'function') renderAttendance();        }      }    }  });
-  onSnapshot(globalDocRef, (docSnap) => {    if (docSnap.exists()) {      const data = docSnap.data();      if (data.users) { users = data.users; safeStorage.setItem("wfm_users", JSON.stringify(users)); }      if (data.systemRoles) { systemRoles = data.systemRoles; safeStorage.setItem("wfm_system_roles", JSON.stringify(systemRoles)); }      if (data.liveStatus) {         // Merge incoming liveStatus per-agent instead of blindly overwriting the whole local
+  // AUX / inactivity logs now live in one small Firestore document PER CALENDAR WEEK instead of
+  // one shared document for all history (see logWeekDocRef note above). Only the most recent
+  // LIVE_LOG_WEEKS_WINDOW weeks are kept live-synced here; older weeks are fetched on demand
+  // by window.ensureLogWeeksLoaded when a report's date range actually reaches back that far.
+  function refreshLogDependentViews() {
+    if (typeof currentUser === 'undefined' || !currentUser) return;
+    if (typeof renderAgentHistory === 'function') renderAgentHistory();
+    if (typeof isManagerOrAdmin === 'function' && isManagerOrAdmin()) {
+      if (typeof renderDashboard === 'function') renderDashboard();
+      const attSection = document.getElementById("attendanceSection");
+      if (attSection && !attSection.classList.contains("hidden") && typeof renderAttendance === 'function') renderAttendance();
+    }
+  }
+  function startLiveLogWeekListener(weekKey) {
+    if (loadedLiveWeeks.has(weekKey)) return;
+    loadedLiveWeeks.add(weekKey);
+    onSnapshot(logWeekDocRef(weekKey), (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        let changed = false;
+        // Merge (never replace outright) -- each live month's listener only ever knows about ITS
+        // OWN month's keys, and there can be up to LIVE_LOG_WEEKS_WINDOW listeners active at once.
+        if (data.auxLogs) { Object.assign(auxLogs, data.auxLogs); safeStorage.setItem("wfm_aux_logs", JSON.stringify(auxLogs)); changed = true; }
+        if (data.inactivityLogs) { Object.assign(inactivityLogs, data.inactivityLogs); safeStorage.setItem("wfm_inactivity_logs", JSON.stringify(inactivityLogs)); changed = true; }
+        if (changed) refreshLogDependentViews();
+      }
+    });
+  }
+  function startLogWeekListeners() {
+    if (logWeekListenersStarted) return;
+    logWeekListenersStarted = true;
+    liveLogWeeks = [];
+    for (let i = 0; i < LIVE_LOG_WEEKS_WINDOW; i++) liveLogWeeks.push(localWeekKey(-i));
+    liveLogWeeks.forEach(startLiveLogWeekListener);
+  }
+  // ONE-TIME MIGRATION: older builds of this app kept all AUX/inactivity history in a single
+  // "wfm_store/logs" document. The first time this new build runs against an existing project,
+  // split that old document's data into the new per-week documents. The old document is left in
+  // place untouched (never deleted) -- harmless, unused leftover -- so this migration can never
+  // lose data even if it's interrupted or re-run.
+  async function migrateOldSingleLogsDocIfNeeded(centralStateHasIndex) {
+    if (logWeekMigrationAttempted || centralStateHasIndex) return;
+    logWeekMigrationAttempted = true;
+    try {
+      const oldLogsRef = doc(db, "wfm_store", "logs");
+      const oldSnap = await getDoc(oldLogsRef);
+      const byWeek = {};
+      if (oldSnap.exists()) {
+        const oldData = oldSnap.data() || {};
+        const oldAux = oldData.auxLogs || {};
+        const oldInactivity = oldData.inactivityLogs || {};
+        Object.keys(oldAux).forEach(k => { const mk = weekKeyOf(k); (byWeek[mk] || (byWeek[mk] = { auxLogs: {}, inactivityLogs: {} })).auxLogs[k] = oldAux[k]; });
+        Object.keys(oldInactivity).forEach(k => { const mk = weekKeyOf(k); (byWeek[mk] || (byWeek[mk] = { auxLogs: {}, inactivityLogs: {} })).inactivityLogs[k] = oldInactivity[k]; });
+      }
+      const weekKeys = Object.keys(byWeek);
+      await Promise.all(weekKeys.map(mk => setDoc(logWeekDocRef(mk), byWeek[mk], { merge: true })));
+      // Always make sure the current month exists in the index even if there's no old data at all.
+      const idx = new Set(weekKeys); idx.add(localWeekKey(0));
+      logWeekIndex = Array.from(idx).sort();
+      await setDoc(globalDocRef, { logWeekIndex }, { merge: true });
+      console.log("Migrated legacy logs document into", weekKeys.length, "weekly documents.");
+    } catch (e) { console.error("Log-week migration error:", e); logWeekMigrationAttempted = false; }
+  }
+  onSnapshot(globalDocRef, (docSnap) => {    if (docSnap.exists()) {      const data = docSnap.data();      if (data.users) { users = data.users; safeStorage.setItem("wfm_users", JSON.stringify(users)); }      if (data.systemRoles) { systemRoles = data.systemRoles; safeStorage.setItem("wfm_system_roles", JSON.stringify(systemRoles)); }
+      // Sharded-logs bookkeeping: pick up the week index (which weekly logs_<week> documents
+      // exist), run the one-time legacy migration if it hasn't happened yet, then start the live
+      // listeners for the current rolling window of months.
+      if (Array.isArray(data.logWeekIndex)) { logWeekIndex = data.logWeekIndex.slice(); }
+      migrateOldSingleLogsDocIfNeeded(Array.isArray(data.logWeekIndex)).then(() => { startLogWeekListeners(); });
+      if (Array.isArray(data.logWeekIndex)) { startLogWeekListeners(); }
+      if (data.liveStatus) {         // Merge incoming liveStatus per-agent instead of blindly overwriting the whole local
         // cache: a Firestore snapshot can arrive slightly out of order relative to this
         // browser's own targeted per-agent writes (e.g. right after a manager's Manage
         // Agents override), and a blind overwrite would silently regress THAT agent's --
@@ -143,37 +254,39 @@
       if (!currentUser) {        const savedUname = safeStorage.getItem("wfm_current_user_id");        if (savedUname) {          const found = users.find(x => x.username.toLowerCase() === savedUname.toLowerCase() || x.id === savedUname);          if (found && found.status === "inactive") {            safeStorage.removeItem("wfm_current_user_id");            if (typeof safeSession !== 'undefined') { safeSession.removeItem("wfm_current_user"); }          } else if (found) { currentUser = found; initializeAppView(); }        }      } else {        const meNow = users.find(x => x.username.toLowerCase() === currentUser.username.toLowerCase());        if (meNow && meNow.status === "inactive") {          alert("Your access to this tool has been removed. Please contact WFM Admin.");          if (typeof performLogout === 'function') { performLogout(); }          return;        }        if (typeof isManagerOrAdmin === 'function' && isManagerOrAdmin()) {          renderDashboard();          renderAttendance();          renderPlot();          renderAdmin();        } else {          renderPlot();          renderAgentHistory();        }      }    }  });
   // Global Central Cloud Save Hook
   window.saveAll = async function() {
-    // Prune old dated logs so the LOGS document doesn't outgrow Firestore's 1MB limit,
-    // which was silently blocking ALL future saves once it was hit.
-    if (typeof auxLogs !== 'undefined') auxLogs = pruneOldDatedLogs(auxLogs, LOG_RETENTION_DAYS);
-    if (typeof inactivityLogs !== 'undefined') inactivityLogs = pruneOldDatedLogs(inactivityLogs, LOG_RETENTION_DAYS);
-
-    // Safety valve: if the LOGS document alone is still too close to Firestore's 1MB hard limit
-    // even after the normal retention-day prune (e.g. a large roster with heavy AUX activity),
-    // progressively shrink the retention window for THIS save only, until it's comfortably under
-    // the limit. This is now sized against the logs payload ALONE, not the whole shared dataset,
-    // so it shrinks only when logs themselves are the problem -- a large schedule upload (which
-    // lives in its own document now) no longer forces log retention down.
+    // Build the small per-week log payloads for just the LIVE rolling window (current week +
+    // the previous couple of months -- see LIVE_LOG_WEEKS_WINDOW). Virtually all writes are for
+    // "today", so in the overwhelming majority of saves this is exactly ONE small document write,
+    // not a rewrite of the whole history. Historical months (loaded read-only into
+    // window.__wfmHistoricalLogCache for older reports) are never written back here.
+    if (!liveLogWeeks || liveLogWeeks.length === 0) { liveLogWeeks = []; for (let i = 0; i < LIVE_LOG_WEEKS_WINDOW; i++) liveLogWeeks.push(localWeekKey(-i)); }
     const FIRESTORE_DOC_SAFE_BYTES = 900000; // stay under the ~1,048,576 byte hard cap with headroom
-    let effectiveRetentionDays = LOG_RETENTION_DAYS;
-    function currentLogsEstimatedSize() {
-      try {
-        return new Blob([JSON.stringify({ auxLogs, inactivityLogs })]).size;
-      } catch (e) { return 0; }
+    const weekWrites = [];
+    let anyWeekOverSize = false;
+    liveLogWeeks.forEach(weekKey => {
+      const weekAux = {}, weekInactivity = {};
+      Object.keys(auxLogs || {}).forEach(k => { if (weekKeyOf(k) === weekKey) weekAux[k] = auxLogs[k]; });
+      Object.keys(inactivityLogs || {}).forEach(k => { if (weekKeyOf(k) === weekKey) weekInactivity[k] = inactivityLogs[k]; });
+      const payload = { auxLogs: weekAux, inactivityLogs: weekInactivity };
+      let sizeBytes = 0;
+      try { sizeBytes = new Blob([JSON.stringify(payload)]).size; } catch (e) {}
+      if (sizeBytes > FIRESTORE_DOC_SAFE_BYTES) {
+        // Should never realistically happen at normal agent-count scale (a single month, sharded
+        // this small, would need an enormous roster to approach 1MB) -- but stay defensive and
+        // warn rather than silently fail a write Firestore would reject anyway.
+        anyWeekOverSize = true;
+        console.warn(`Log month ${weekKey} is approaching Firestore's 1MB limit (${sizeBytes} bytes) -- consider narrowing LIVE_LOG_WEEKS_WINDOW or investigating unusually heavy activity.`);
+      }
+      weekWrites.push({ weekKey, payload });
+    });
+    if (anyWeekOverSize && typeof showSyncBanner === 'function') {
+      showSyncBanner(true, "One month's log document is approaching Firestore's 1MB limit -- contact WFM Admin, this needs a smaller sharding window.");
     }
-    let estLogsSize = currentLogsEstimatedSize();
-    let shrinkAttempts = 0;
-    while (estLogsSize > FIRESTORE_DOC_SAFE_BYTES && effectiveRetentionDays > 30 && shrinkAttempts < 8) {
-      effectiveRetentionDays = Math.max(30, Math.floor(effectiveRetentionDays / 2));
-      if (typeof auxLogs !== 'undefined') auxLogs = pruneOldDatedLogs(auxLogs, effectiveRetentionDays);
-      if (typeof inactivityLogs !== 'undefined') inactivityLogs = pruneOldDatedLogs(inactivityLogs, effectiveRetentionDays);
-      estLogsSize = currentLogsEstimatedSize();
-      shrinkAttempts++;
-    }
-    if (effectiveRetentionDays < LOG_RETENTION_DAYS) {
-      console.warn("Logs document was approaching Firestore's 1MB limit -- log retention for this save was temporarily reduced to " + effectiveRetentionDays + " days to keep saving working.");
-      if (typeof showSyncBanner === 'function') showSyncBanner(true, "Approaching Firestore's 1MB logs-document limit -- retention auto-reduced to " + effectiveRetentionDays + " days for this save. Consider lowering LOG_RETENTION_DAYS if this keeps happening.");
-    }
+    // Make sure every live month (even ones with zero entries so far, e.g. right after a month
+    // rolls over) is registered in the index so it's discoverable by other devices/sessions.
+    let logWeekIndexChanged = false;
+    liveLogWeeks.forEach(mk => { if (!logWeekIndex.includes(mk)) { logWeekIndex.push(mk); logWeekIndexChanged = true; } });
+    if (logWeekIndexChanged) logWeekIndex.sort();
 
     // NOTE: liveStatus is intentionally NOT included in any of these writes.
     // liveStatus is persisted exclusively via targeted per-agent field-path writes
@@ -181,18 +294,16 @@
     // data (schedules, a page refresh, etc.) can never overwrite another agent's live
     // AUX status with a stale local snapshot of the whole liveStatus map.
     //
-    // Everything else is now split across THREE documents instead of one, each with its own
-    // independent ~1MB Firestore budget, so a big schedule upload and a long log history never
-    // compete for the same size cap:
-    //   central_state -> users, systemRoles, liveStatus (targeted writes)
-    //   schedules     -> continuousSchedules, grid15mSchedules
-    //   logs          -> auxLogs, inactivityLogs
+    // Everything else is split across small, independent Firestore documents so nothing competes
+    // for the same 1MB size cap:
+    //   central_state  -> users, systemRoles, liveStatus (targeted writes), logWeekIndex
+    //   schedules      -> continuousSchedules, grid15mSchedules
+    //   logs_<YYYY-MM> -> auxLogs, inactivityLogs for just that one calendar month
     // Calling Leads and Agent Login Location/IP Logs have been removed entirely (per request) --
     // neither their data nor any capture code is synced to Firestore any more, cutting storage/
     // bandwidth use accordingly.
-    const centralState = {      users: typeof users !== 'undefined' ? users : [],      systemRoles: typeof systemRoles !== 'undefined' ? systemRoles : []    };
+    const centralState = {      users: typeof users !== 'undefined' ? users : [],      systemRoles: typeof systemRoles !== 'undefined' ? systemRoles : [],      logWeekIndex: logWeekIndex    };
     const schedulesState = {      continuousSchedules: typeof continuousSchedules !== 'undefined' ? continuousSchedules : {},      grid15mSchedules: typeof grid15mSchedules !== 'undefined' ? grid15mSchedules : {}    };
-    const logsState = {      auxLogs: typeof auxLogs !== 'undefined' ? auxLogs : {},      inactivityLogs: typeof inactivityLogs !== 'undefined' ? inactivityLogs : {}    };
 
     // Persist to localStorage IMMEDIATELY and SYNCHRONOUSLY (not just after the Firestore
     // round-trip). This is the actual fix for AUX summaries appearing to reset/erase:
@@ -203,14 +314,14 @@
       safeStorage.setItem("wfm_system_roles", JSON.stringify(centralState.systemRoles));
       safeStorage.setItem("wfm_continuous_schedules", JSON.stringify(schedulesState.continuousSchedules));
       safeStorage.setItem("wfm_grid15m_schedules", JSON.stringify(schedulesState.grid15mSchedules));
-      safeStorage.setItem("wfm_aux_logs", JSON.stringify(logsState.auxLogs));
-      safeStorage.setItem("wfm_inactivity_logs", JSON.stringify(logsState.inactivityLogs));
+      safeStorage.setItem("wfm_aux_logs", JSON.stringify(auxLogs || {}));
+      safeStorage.setItem("wfm_inactivity_logs", JSON.stringify(inactivityLogs || {}));
     } catch (e) { console.error("Local persist error:", e); }
 
     const results = await Promise.allSettled([
       setDoc(globalDocRef, centralState, { merge: true }),
       setDoc(schedulesDocRef, schedulesState, { merge: true }),
-      setDoc(logsDocRef, logsState, { merge: true })
+      ...weekWrites.map(w => setDoc(logWeekDocRef(w.weekKey), w.payload, { merge: true }))
     ]);
     const failed = results.filter(r => r.status === 'rejected');
     if (failed.length === 0) {
@@ -248,6 +359,46 @@
         if (typeof showSyncBanner === 'function') showSyncBanner(true, explainFirestoreError(e2));
       }
     }
+  };
+
+  // Fetches (once) any OLDER log-week documents a report's date range needs that aren't already
+  // part of the live rolling window, merging them read-only into window.__wfmHistoricalLogCache.
+  // Called by the classic script (ensureLogsForRange) before rendering/exporting Attendance,
+  // Dashboard, Activity Logs or CSV exports whenever the selected date range reaches further back
+  // than LIVE_LOG_WEEKS_WINDOW -- this is what makes years of retained history actually reachable
+  // from the UI without loading all of it up front.
+  window.ensureLogWeeksLoaded = async function(fromDateStr, toDateStr) {
+    try {
+      if (!fromDateStr || !toDateStr) return;
+      const months = weekKeysInRange(fromDateStr, toDateStr);
+      const missing = months.filter(m => !loadedLiveWeeks.has(m) && !historicalLoadAttempted.has(m) && logWeekIndex.includes(m));
+      if (missing.length === 0) return;
+      missing.forEach(m => historicalLoadAttempted.add(m));
+      const snaps = await Promise.all(missing.map(m => getDoc(logWeekDocRef(m)).catch(() => null)));
+      snaps.forEach(snap => {
+        if (snap && snap.exists()) {
+          const data = snap.data();
+          if (data.auxLogs) Object.assign(window.__wfmHistoricalLogCache.auxLogs, data.auxLogs);
+          if (data.inactivityLogs) Object.assign(window.__wfmHistoricalLogCache.inactivityLogs, data.inactivityLogs);
+        }
+      });
+    } catch (e) { console.error("ensureLogWeeksLoaded error:", e); }
+  };
+
+  // Deletes whole month-documents once every date they contain is older than LOG_RETENTION_DAYS.
+  // Run once per session (see initializeAppView) rather than on every save -- retention doesn't
+  // need to react instantly, and this keeps normal save operations cheap (see window.saveAll).
+  window.pruneOldLogWeeks = async function() {
+    try {
+      const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - LOG_RETENTION_DAYS);
+      const cutoffWeekKey = cutoff.getFullYear() + "-" + String(cutoff.getMonth() + 1).padStart(2, "0");
+      const toDelete = logWeekIndex.filter(m => m < cutoffWeekKey);
+      if (toDelete.length === 0) return;
+      await Promise.allSettled(toDelete.map(m => deleteDoc(logWeekDocRef(m))));
+      logWeekIndex = logWeekIndex.filter(m => !toDelete.includes(m));
+      await setDoc(globalDocRef, { logWeekIndex }, { merge: true }).catch(() => {});
+      console.log("Pruned log-week documents older than " + LOG_RETENTION_DAYS + " days:", toDelete);
+    } catch (e) { console.error("pruneOldLogWeeks error:", e); }
   };
 
   // Cloud module is now fully initialized -- window.saveAll/pushLiveStatusField both exist.
@@ -369,6 +520,19 @@ setInterval(checkInactivityState, 5000);
 function toLocalDateStr(d){ if(!(d instanceof Date)) d = new Date(d); const y=d.getFullYear(); const m=String(d.getMonth()+1).padStart(2,"0"); const day=String(d.getDate()).padStart(2,"0"); return `${y}-${m}-${day}`; }
 function today(){ return toLocalDateStr(new Date()); }
 function syncStorageData(){   users = __safeParse(safeStorage.getItem("wfm_users"), users);   if(!users || users.length === 0){ users = defaultUsers; }  continuousSchedules = __safeParse(safeStorage.getItem("wfm_continuous_schedules"), continuousSchedules);   grid15mSchedules = __safeParse(safeStorage.getItem("wfm_grid15m_schedules"), grid15mSchedules);   auxLogs = __safeParse(safeStorage.getItem("wfm_aux_logs"), auxLogs);   inactivityLogs = __safeParse(safeStorage.getItem("wfm_inactivity_logs"), inactivityLogs);  locationLogs = __safeParse(safeStorage.getItem("wfm_location_logs"), locationLogs);  callingLeads = __safeParse(safeStorage.getItem("wfm_calling_leads"), callingLeads);  systemRoles = __safeParse(safeStorage.getItem("wfm_system_roles"), systemRoles);}
+/* Logs are sharded by month in Firestore (see the cloud module) -- the live in-memory auxLogs/
+   inactivityLogs only ever hold the recent rolling window of months. These two getters check that
+   live data FIRST, then fall back to window.__wfmHistoricalLogCache, which ensureLogsForRange()
+   lazily fills with older months on demand. Every existing read site was a plain auxLogs[key] /
+   inactivityLogs[key] lookup (often with a fallback key variant) -- these getters accept any
+   number of candidate keys and check each, in order, against both sources, so callers didn't need
+   to change how they build keys, only how they read them. */
+function getAuxLogEntries(){   for(let i=0;i<arguments.length;i++){ if(auxLogs[arguments[i]]) return auxLogs[arguments[i]]; }   const hist = window.__wfmHistoricalLogCache;   if(hist && hist.auxLogs){ for(let i=0;i<arguments.length;i++){ if(hist.auxLogs[arguments[i]]) return hist.auxLogs[arguments[i]]; } }   return [];}
+function getInactivityLogEntries(){   for(let i=0;i<arguments.length;i++){ if(inactivityLogs[arguments[i]]) return inactivityLogs[arguments[i]]; }   const hist = window.__wfmHistoricalLogCache;   if(hist && hist.inactivityLogs){ for(let i=0;i<arguments.length;i++){ if(hist.inactivityLogs[arguments[i]]) return hist.inactivityLogs[arguments[i]]; } }   return [];}
+/* Called before any report/export whose date range might reach further back than the live
+   rolling window of log months. No-ops instantly (no await delay) when everything needed is
+   already loaded -- only the first request for an older month actually waits on a Firestore read. */
+async function ensureLogsForRange(fromVal, toVal){   if(typeof window.ensureLogWeeksLoaded === 'function'){ try { await window.ensureLogWeeksLoaded(fromVal, toVal); } catch(e){ console.error("ensureLogsForRange error:", e); } }}
 document.addEventListener("mousedown",()=>isMouseDown=true);document.addEventListener("mouseup",()=>isMouseDown=false);
 function calculateNextDate(dateStr) {   let parts = dateStr.split("-");  let y = parseInt(parts[0], 10);  let m = parseInt(parts[1], 10) - 1;  let d = parseInt(parts[2], 10);  let dt = new Date(y, m, d + 1);  let resY = dt.getFullYear();  let resM = String(dt.getMonth() + 1).padStart(2, "0");  let resD = String(dt.getDate()).padStart(2, "0");  return `${resY}-${resM}-${resD}`;}
 function normalizeDateStr(dateStr) {   if (!dateStr) return today();   dateStr = String(dateStr).trim();   if(!isNaN(dateStr) && !dateStr.includes("-") && !dateStr.includes("/")) {      const excelEpoch = new Date(Date.UTC(1899, 11, 30));      const parsedDate = new Date(excelEpoch.getTime() + parseFloat(dateStr) * 86400000);      return parsedDate.toISOString().slice(0, 10);   }   let parts = dateStr.replace(/-/g, "/").split("/");   if (parts.length === 3) {      let p1 = parts[0], p2 = parts[1], p3 = parts[2];      let y, m, d;      if (p1.length === 4) { y = parseInt(p1); m = parseInt(p2); d = parseInt(p3); }      else { m = parseInt(p1); d = parseInt(p2); y = parseInt(p3); if (y < 100) y += 2000; }      return String(y).padStart(4,"0") + "-" + String(m).padStart(2,"0") + "-" + String(d).padStart(2,"0");   }   return dateStr;}
@@ -394,7 +558,11 @@ function initializeAppView(){   syncStorageData();   document.getElementById("lo
       // Never carry a stale start time across a day boundary: that corrupts today's First Available /
       // Last Offline timestamps with yesterday's data. Always start the new day fresh in Unavailable.
       safeStorage.removeItem("wfm_user_aux_state_" + currentUser.username.toLowerCase());      changeActiveAux("unavailable");   }
-  applyPermissions();   populateFilters();   renderLegend();   renderTimelineHeader();   renderPlot();   renderAgentHistory();   renderDashboard();   renderAdmin();   renderSettings();  startClock();   showTab(isManagerOrAdmin() ? "plot" : "agent");}
+  applyPermissions();   populateFilters();   renderLegend();   renderTimelineHeader();   renderPlot();   renderAgentHistory();   renderDashboard();   renderAdmin();   renderSettings();  startClock();   showTab(isManagerOrAdmin() ? "plot" : "agent");
+  // Delete whole log-month Firestore documents once every date in them is older than
+  // LOG_RETENTION_DAYS. Cheap no-op almost always (nothing to prune until retention is actually
+  // exceeded); run once per login rather than on every save.
+  if(typeof window.pruneOldLogWeeks === 'function'){ window.pruneOldLogWeeks().catch(()=>{}); }}
 function openResetModal(){   document.getElementById("resetModal").classList.remove("hidden");   document.getElementById("otpStep1").classList.remove("hidden");   document.getElementById("otpStep2").classList.add("hidden");   document.getElementById("otpStep3").classList.add("hidden");   const otpNoticeEl = document.getElementById("otpDeliveryNotice");   if(otpNoticeEl){ otpNoticeEl.classList.add("hidden"); otpNoticeEl.textContent=""; }   document.getElementById("resetEmail").value="";   document.getElementById("captchaInput").value="";   document.getElementById("otpInput").value="";   document.getElementById("newPassInput").value="";   document.getElementById("confirmPassInput").value="";   document.getElementById("resetError").textContent="";   regenerateCaptcha();   stopOtpCountdown();}
 function closeResetModal(){ document.getElementById("resetModal").classList.add("hidden"); stopOtpCountdown();}
 let generatedOTP = null, targetResetUser = null, currentCaptchaText = "", otpCountdownInterval = null, otpExpiryTime = null;
@@ -596,8 +764,9 @@ function matchAuxCode(rawVal) {   if(!rawVal) return null;   const query = rawVa
   // Automatically adjust view filters to span imported CSV date bounds
   if(minImportDate && maxImportDate){    const fromEl = document.getElementById("scheduleFromDate");    const toEl = document.getElementById("scheduleToDate");    if(fromEl) fromEl.value = minImportDate;    if(toEl) toEl.value = maxImportDate;  }
   safeSaveAll();   populateFilters();   renderAdmin();   renderPlot();   alert(`Successfully imported ${count} schedule entries from ${fileName}! Overlaps trimmed and dates displayed from ${minImportDate} to ${maxImportDate}.`);}
-function renderAgentHistory(){   if(!currentUser)return;   const histDate=document.getElementById("historyDate").value||today();   document.getElementById("historyDateLabel").textContent=histDate;   document.getElementById("historyLogLabel").textContent=histDate;
-  const logs=auxLogs[histDate+"_"+currentUser.username.toLowerCase()]||auxLogs[histDate+"_"+currentUser.id]||[];   const totals={};   LIVE_DROPDOWN_AUX.forEach(a=>totals[a.key]=0);   logs.forEach(l=>{ if(totals[l.auxKey]!==undefined) totals[l.auxKey]+=l.durationSec; });
+async function renderAgentHistory(){   if(!currentUser)return;   const histDate=document.getElementById("historyDate").value||today();   document.getElementById("historyDateLabel").textContent=histDate;   document.getElementById("historyLogLabel").textContent=histDate;
+  await ensureLogsForRange(histDate, histDate);
+  const logs=getAuxLogEntries(histDate+"_"+currentUser.username.toLowerCase(), histDate+"_"+currentUser.id);   const totals={};   LIVE_DROPDOWN_AUX.forEach(a=>totals[a.key]=0);   logs.forEach(l=>{ if(totals[l.auxKey]!==undefined) totals[l.auxKey]+=l.durationSec; });
   if(histDate === today() && currentActiveAux){      const currentElapsed = Math.floor((Date.now() - auxStartTime) / 1000);      if(totals[currentActiveAux] !== undefined){ totals[currentActiveAux] += currentElapsed; }   }
   function getKpiStyle(key, sec){      if(key === "available"){         if(sec < 27000) return 'style="background:#ffc7ce;color:#9c0006;border:1px solid #f87171"';         if(sec <= 28799) return 'style="background:#ffeb9c;color:#9c6500;border:1px solid #fbbf24"';         return 'style="background:#c6efce;color:#006100;border:1px solid #4ade80"';      }      if(key === "break" || key === "lunch"){         if(sec <= 1800) return 'style="background:#c6efce;color:#006100;border:1px solid #4ade80"';         return 'style="background:#ffc7ce;color:#9c0006;border:1px solid #f87171"';      }      if(key === "bio"){         if(sec <= 600) return 'style="background:#c6efce;color:#006100;border:1px solid #4ade80"';         return 'style="background:#ffc7ce;color:#9c0006;border:1px solid #f87171"';      }      return '';   }
   const trackKeys = ["available", "break", "lunch", "bio"];   let html = '<div class="kpis">';   trackKeys.forEach(k => {      const a = auxByKey(k) || {label: k};      const sec = totals[k] || 0;      const styleAttr = getKpiStyle(k, sec);      html += `<div class="kpi" ${styleAttr} id="kpi_${k}"><b>${fmt(sec)}</b><small>${a.label}</small></div>`;   });   html += '</div>';   document.getElementById("todaySummary").innerHTML = html;
@@ -613,7 +782,7 @@ function getDashboardDateRange(){   let fromVal = document.getElementById("repor
 const DASHBOARD_TRACKED_AUX_LIST = [ "available", "break", "lunch", "bio", "meeting", "tlfeedback", "qafeedback", "nht", "pkt", "training", "coaching", "unavailable", "offline" ];
 function computeDashboardRows(dateList, agents){   syncStorageData();   let liveStatus = JSON.parse(safeStorage.getItem("wfm_live_agent_status") || "{}");   const trackedAuxList = DASHBOARD_TRACKED_AUX_LIST;   const rowsData = [];   let availableSec=0, breakSec=0;   const onlineAgentKeys = new Set();
   // One row per agent PER DATE in the selected range, same pattern as Agent Attendance Logs, so every day is visible
-  dateList.forEach(date => {      const isToday = (date === today());      agents.forEach(a=>{         const uKey = a.username.toLowerCase();         const logs = auxLogs[date+"_"+uKey] || auxLogs[date+"_"+a.id] || [];         const iLogs = inactivityLogs[date+"_"+uKey] || inactivityLogs[date+"_"+a.id] || [];
+  dateList.forEach(date => {      const isToday = (date === today());      agents.forEach(a=>{         const uKey = a.username.toLowerCase();         const logs = getAuxLogEntries(date+"_"+uKey, date+"_"+a.id);         const iLogs = getInactivityLogEntries(date+"_"+uKey, date+"_"+a.id);
       const auxTotals = {};      trackedAuxList.forEach(k => auxTotals[k] = 0);      logs.forEach(l=>{         if(auxTotals[l.auxKey] !== undefined) {          auxTotals[l.auxKey] += l.durationSec;        }      });
       let inactiveSec = 0;      iLogs.forEach(il => {        inactiveSec += (il.durationSec || 0);      });
       // Live/ongoing status only applies to today's row; past dates show historical totals only
@@ -626,8 +795,8 @@ function computeDashboardRows(dateList, agents){   syncStorageData();   let live
       const agentBlocks = getAgentBlocks(a.id, date);      let assignedAuxLabel = "Available";      let assignedAuxColor = "#22c55e";      if (agentBlocks && agentBlocks.length > 0) {         const assignedAuxObj = auxByKey(agentBlocks[0].auxKey);         if (assignedAuxObj) {            assignedAuxLabel = assignedAuxObj.label;            assignedAuxColor = assignedAuxObj.color;         }      }
       rowsData.push({         agent: a,         date: date,         isToday: isToday,         currentAuxLabel: isToday ? `${currentAuxObj?.label||"Unavailable"}${liveTimerText}` : "Historical",         currentAuxColor: isToday ? (currentAuxObj?.color||"#ef4444") : null,         assignedAuxLabel: assignedAuxLabel,         assignedAuxColor: assignedAuxColor,         inactiveSec: inactiveSec,         auxTotals: auxTotals      });      });   });
   return { rowsData, availableSec, breakSec, onlineCount: onlineAgentKeys.size, trackedAuxList };}
-function renderDashboard(){   if(!currentUser||!isManagerOrAdmin())return;   syncStorageData();
-  const { dateList } = getDashboardDateRange();   const agents = getDashboardFilteredAgents();   const { rowsData, availableSec, breakSec, onlineCount, trackedAuxList } = computeDashboardRows(dateList, agents);
+async function renderDashboard(){   if(!currentUser||!isManagerOrAdmin())return;   syncStorageData();
+  const { fromVal, toVal, dateList } = getDashboardDateRange();   await ensureLogsForRange(fromVal, toVal);   const agents = getDashboardFilteredAgents();   const { rowsData, availableSec, breakSec, onlineCount, trackedAuxList } = computeDashboardRows(dateList, agents);
   const rows = rowsData.map(r => {      const currentAuxCell = r.isToday         ? `<span class="status-dot" style="background:${r.currentAuxColor}"></span> <b>${esc(r.currentAuxLabel)}</b>`         : `<span style="color:#94a3b8">— (historical)</span>`;      const assignedShiftCell = `<span class="status-dot" style="background:${r.assignedAuxColor}"></span> <b>${esc(r.assignedAuxLabel)}</b>`;      let auxCellsHtml = `<td>${fmt(r.auxTotals["available"])}</td><td style="color:#b91c1c;font-weight:bold">${fmt(r.inactiveSec)}</td>`;      trackedAuxList.slice(1).forEach(k => { auxCellsHtml += `<td>${fmt(r.auxTotals[k])}</td>`; });      return `<tr><td>${esc(r.agent.name)}</td><td>${r.date}</td><td>${esc(r.agent.agency)}</td><td>${esc(r.agent.queue)}</td><td>${esc(r.agent.shift)}</td> <td>${assignedShiftCell}</td> <td>${currentAuxCell}</td> ${auxCellsHtml}</tr>`;   }).join("");
   document.getElementById("dashboardKpis").innerHTML=` <div class="kpi"><b>${agents.length}</b><small>Total Tracked Users</small></div> <div class="kpi"><b>${onlineCount}</b><small>Active Users Logged</small></div> <div class="kpi"><b>${fmt(availableSec)}</b><small>Total Available Time</small></div> <div class="kpi"><b>${fmt(breakSec)}</b><small>Total Break Time</small></div>`;   document.getElementById("dashboardBody").innerHTML=rows;}
 function switchAttendanceSubTab(subTab) {  const btnSummary = document.getElementById("subTabSummary");  const btnInactivity = document.getElementById("subTabInactivity");  const btnActivity = document.getElementById("subTabActivity");
@@ -652,7 +821,7 @@ function getDailyAvailabilityTimestamps(agent, date, liveStatus){
 
   const isToday = (date === todayStr);
   const uKey = agent.username.toLowerCase();
-  const sessions = (auxLogs[date + "_" + uKey] || auxLogs[date + "_" + agent.id] || []).map(l => ({ auxKey: l.auxKey, startTime: l.startTime }));
+  const sessions = getAuxLogEntries(date + "_" + uKey, date + "_" + agent.id).map(l => ({ auxKey: l.auxKey, startTime: l.startTime }));
 
   if (isToday) {
     let liveAuxKey = null, liveStartMs = null;
@@ -676,7 +845,8 @@ function getDailyAvailabilityTimestamps(agent, date, liveStatus){
 
   return { firstAvailable, lastOffline };
 }
-/* RENDER ATTENDANCE, INACTIVITY & LOCATION LOGS WITH MULTI-SELECT DROPDOWNS */function renderAttendance(){   if(!currentUser||!isManagerOrAdmin())return;   syncStorageData();   let fromVal = document.getElementById("attendanceFromDate")?.value;   let toVal = document.getElementById("attendanceToDate")?.value;    if(!fromVal) { fromVal = today(); if(document.getElementById("attendanceFromDate")) document.getElementById("attendanceFromDate").value = fromVal; }   if(!toVal) { toVal = fromVal; if(document.getElementById("attendanceToDate")) document.getElementById("attendanceToDate").value = toVal; }
+/* RENDER ATTENDANCE, INACTIVITY & LOCATION LOGS WITH MULTI-SELECT DROPDOWNS */async function renderAttendance(){   if(!currentUser||!isManagerOrAdmin())return;   syncStorageData();   let fromVal = document.getElementById("attendanceFromDate")?.value;   let toVal = document.getElementById("attendanceToDate")?.value;    if(!fromVal) { fromVal = today(); if(document.getElementById("attendanceFromDate")) document.getElementById("attendanceFromDate").value = fromVal; }   if(!toVal) { toVal = fromVal; if(document.getElementById("attendanceToDate")) document.getElementById("attendanceToDate").value = toVal; }
+  await ensureLogsForRange(fromVal, toVal);
   const dateList = getDateRangeArray(fromVal, toVal);   const search = (document.getElementById("searchAttendanceAgent")?.value || "").toLowerCase();   let agents = users.filter(u => u.role !== "admin" || u.id === currentUser.id); 
   // Multi-Select Filtering for Agencies, Queues & Status
   const selAgencies = getMultiSelectValues("attAgencyFilter");  const selQueues = getMultiSelectValues("attQueueFilter");  const selStatuses = getMultiSelectValues("attStatusFilter");
@@ -692,15 +862,15 @@ function getDailyAvailabilityTimestamps(agent, date, liveStatus){
   if(!summaryRows){ summaryRows = `<tr><td colspan="9" style="text-align:center;color:#667085">No attendance logs found for selected date range (${fromVal} to ${toVal}).</td></tr>`; }   document.getElementById("attendanceBody").innerHTML = summaryRows;
   // 2. Render Inactivity Frequency Table
   let inactivityRows = "";  dateList.forEach(date => {    agents.forEach(a => {      if(search && !a.name.toLowerCase().includes(search) && !a.username.toLowerCase().includes(search) && (!a.email || !a.email.toLowerCase().includes(search))){            return;         }
-      const uKey = a.username.toLowerCase();      const iLogs = inactivityLogs[date + "_" + uKey] || inactivityLogs[date + "_" + a.id] || [];
+      const uKey = a.username.toLowerCase();      const iLogs = getInactivityLogEntries(date + "_" + uKey, date + "_" + a.id);
       if (iLogs.length > 0) {        iLogs.forEach((il, idx) => {          inactivityRows += `<tr> <td><b>${esc(a.name)}</b></td> <td>${esc(a.username || a.email)}</td> <td>${date}</td> <td><b>Occurrence #${idx + 1}</b></td> <td><span style="color:#b91c1c;font-weight:bold">${il.startTime}</span></td> <td><span style="color:#15803d;font-weight:bold">${il.endTime}</span></td> <td><b>${fmt(il.durationSec)}</b></td> </tr>`;        });      }    });  });
   if(!inactivityRows){ inactivityRows = `<tr><td colspan="7" style="text-align:center;color:#667085">No agent inactivity occurrences (>= 5 mins idle) recorded for selected date range.</td></tr>`; }  document.getElementById("inactivityBody").innerHTML = inactivityRows;
   // 4. Render Agent Activity Logs Table -- one row per AUX change (including implicit login/logout transitions), with device
   let activityRows = "";  dateList.forEach(date => {    agents.forEach(a => {      if(search && !a.name.toLowerCase().includes(search) && !a.username.toLowerCase().includes(search) && (!a.email || !a.email.toLowerCase().includes(search))){            return;         }
-      const uKey = a.username.toLowerCase();      const auxEntries = auxLogs[date + "_" + uKey] || auxLogs[date + "_" + a.id] || [];
+      const uKey = a.username.toLowerCase();      const auxEntries = getAuxLogEntries(date + "_" + uKey, date + "_" + a.id);
       auxEntries.forEach(entry => {        const auxObj = auxByKey(entry.auxKey);        activityRows += `<tr> <td><b>${esc(a.name)}</b></td> <td>${esc(a.username || a.email)}</td> <td><span class="status-dot" style="background:${auxObj?.color||'#64748b'}"></span> <b>${esc(auxObj?.label||entry.auxKey)}</b></td> <td>${date}</td> <td>${esc(entry.startTime)}</td> <td>${esc(entry.endTime)}</td> <td>${fmt(entry.durationSec)}</td> <td>${esc(entry.device||"-")}</td> </tr>`;      });    });  });
   if(!activityRows){ activityRows = `<tr><td colspan="8" style="text-align:center;color:#667085">No AUX activity recorded for the selected date range and filters.</td></tr>`; }  document.getElementById("activityBody").innerHTML = activityRows;}
-function exportAttendanceCSV(){   const fromInput = document.getElementById("attendanceFromDate")?.value || today();   const toInput = document.getElementById("attendanceToDate")?.value || fromInput;   const dateList = getDateRangeArray(fromInput, toInput);
+async function exportAttendanceCSV(){   const fromInput = document.getElementById("attendanceFromDate")?.value || today();   const toInput = document.getElementById("attendanceToDate")?.value || fromInput;   await ensureLogsForRange(fromInput, toInput);   const dateList = getDateRangeArray(fromInput, toInput);
   const lines = [["Agent Name","Username/Email","Start Date","End Date","Assigned Shift","Assigned Shift AUX Code","First Available Timestamp","Last Offline Timestamp"].join(",")];   const agents = users.filter(u => u.role !== "admin" || u.id === currentUser.id);   let liveStatus = JSON.parse(safeStorage.getItem("wfm_live_agent_status") || "{}");
   dateList.forEach(date => {      agents.forEach(a => {         const { firstAvailable: firstAvailTime, lastOffline: lastOfflineTime } = getDailyAvailabilityTimestamps(a, date, liveStatus);
       const dynamicShifts = getAgentDynamicShifts(a, date);         const assignedShiftStr = (dynamicShifts && dynamicShifts.length > 0) ? dynamicShifts[0] : (a.shift || "09:00-18:00");
@@ -810,8 +980,8 @@ function startInlineEdit(tdEl, userId, fieldName){
    });
 }
 function deleteAgent(id){ if(!confirm("Delete this agent?"))return; users=users.filter(u=>u.id!==id);safeSaveAll();populateFilters();renderPlot();renderAdmin();}
-function exportCSV(){   const date=document.getElementById("scheduleDate").value||today();   const lines=[["Date","Agent Name","Username","Agency","Unit","Queue","AUX","Start Time","End Time","Duration (Sec)"].join(",")];   users.filter(u=>u.role==="agent" || u.role==="team_leader").forEach(a=>{      const logs=auxLogs[date+"_"+a.username.toLowerCase()]||auxLogs[date+"_"+a.id]||[];      logs.forEach(l=>{         const aux=auxByKey(l.auxKey);         lines.push([date,a.name,a.username,a.agency,a.unit,a.queue,aux?.label||l.auxKey,l.startTime,l.endTime,l.durationSec].map(csv).join(","));      });   });   const blob=new Blob([lines.join("\n")],{type:"text/csv;charset=utf-8"});   const url=URL.createObjectURL(blob),link=document.createElement("a");   link.href=url;link.download=`WFM_AUX_History_${date}.csv`;link.click();URL.revokeObjectURL(url);}
-/* EXPORT FOR REPORTING DASHBOARD: MIRRORS THE ON-SCREEN AGENT STATUS SUMMARY TABLE EXACTLY (same columns, same rows, same date range/filters) */function exportDashboardCSV(){   syncStorageData();   const { fromVal, toVal, dateList } = getDashboardDateRange();   const agents = getDashboardFilteredAgents();   const { rowsData, trackedAuxList } = computeDashboardRows(dateList, agents);
+async function exportCSV(){   const date=document.getElementById("scheduleDate").value||today();   await ensureLogsForRange(date, date);   const lines=[["Date","Agent Name","Username","Agency","Unit","Queue","AUX","Start Time","End Time","Duration (Sec)"].join(",")];   users.filter(u=>u.role==="agent" || u.role==="team_leader").forEach(a=>{      const logs=getAuxLogEntries(date+"_"+a.username.toLowerCase(), date+"_"+a.id);      logs.forEach(l=>{         const aux=auxByKey(l.auxKey);         lines.push([date,a.name,a.username,a.agency,a.unit,a.queue,aux?.label||l.auxKey,l.startTime,l.endTime,l.durationSec].map(csv).join(","));      });   });   const blob=new Blob([lines.join("\n")],{type:"text/csv;charset=utf-8"});   const url=URL.createObjectURL(blob),link=document.createElement("a");   link.href=url;link.download=`WFM_AUX_History_${date}.csv`;link.click();URL.revokeObjectURL(url);}
+/* EXPORT FOR REPORTING DASHBOARD: MIRRORS THE ON-SCREEN AGENT STATUS SUMMARY TABLE EXACTLY (same columns, same rows, same date range/filters) */async function exportDashboardCSV(){   syncStorageData();   const { fromVal, toVal, dateList } = getDashboardDateRange();   await ensureLogsForRange(fromVal, toVal);   const agents = getDashboardFilteredAgents();   const { rowsData, trackedAuxList } = computeDashboardRows(dateList, agents);
   const auxHeaderLabels = trackedAuxList.map(k => auxByKey(k)?.label || k);   const header = ["Agent","Date","Agency","Queue","Shift","Assigned Shift Code","Current AUX","Available","Inactive Time", ...auxHeaderLabels.slice(1)];   const lines = [header.map(csv).join(",")];
   rowsData.forEach(r => {      const row = [         r.agent.name,         r.date,         r.agent.agency,         r.agent.queue,         r.agent.shift,         r.assignedAuxLabel,         r.currentAuxLabel,         fmt(r.auxTotals["available"]),         fmt(r.inactiveSec),         ...trackedAuxList.slice(1).map(k => fmt(r.auxTotals[k]))      ];      lines.push(row.map(csv).join(","));   });
   if(rowsData.length === 0){ lines.push(["No agents found for the selected date range and filters."].map(csv).join(",")); }
