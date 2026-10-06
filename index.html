@@ -168,6 +168,24 @@
       if (attSection && !attSection.classList.contains("hidden") && typeof renderAttendance === 'function') renderAttendance();
     }
   }
+  // Log entries are append-only. A cloud snapshot used to REPLACE a day's whole entry array
+  // (Object.assign), so any entries logged on this device that the cloud copy didn't have yet
+  // (a write still in flight, failed, or an older snapshot arriving late) were wiped out -- e.g. the
+  // earlier Available segment vanishing after Lunch/Break and back. Union the two lists instead,
+  // de-duplicating identical entries, so nothing already recorded can ever be lost by a sync.
+  function mergeLogMaps(target, incoming) {
+    Object.keys(incoming || {}).forEach(function (k) {
+      const inc = Array.isArray(incoming[k]) ? incoming[k] : [];
+      const cur = Array.isArray(target[k]) ? target[k] : [];
+      if (cur.length === 0) { target[k] = inc.slice(); return; }
+      const sig = function (e) { return [e.auxKey || "", e.startTime || "", e.endTime || "", e.durationSec || 0].join("|"); };
+      const seen = new Set(cur.map(sig));
+      const merged = cur.slice();
+      inc.forEach(function (e) { if (!seen.has(sig(e))) { seen.add(sig(e)); merged.push(e); } });
+      merged.sort(function (a, b) { return String(a.startTime || "").localeCompare(String(b.startTime || "")); });
+      target[k] = merged;
+    });
+  }
   function startLiveLogWeekListener(weekKey) {
     if (loadedLiveWeeks.has(weekKey)) return;
     loadedLiveWeeks.add(weekKey);
@@ -177,8 +195,8 @@
         let changed = false;
         // Merge (never replace outright) -- each live month's listener only ever knows about ITS
         // OWN month's keys, and there can be up to LIVE_LOG_WEEKS_WINDOW listeners active at once.
-        if (data.auxLogs) { Object.assign(auxLogs, data.auxLogs); safeStorage.setItem("wfm_aux_logs", JSON.stringify(auxLogs)); changed = true; }
-        if (data.inactivityLogs) { Object.assign(inactivityLogs, data.inactivityLogs); safeStorage.setItem("wfm_inactivity_logs", JSON.stringify(inactivityLogs)); changed = true; }
+        if (data.auxLogs) { mergeLogMaps(auxLogs, data.auxLogs); safeStorage.setItem("wfm_aux_logs", JSON.stringify(auxLogs)); changed = true; }
+        if (data.inactivityLogs) { mergeLogMaps(inactivityLogs, data.inactivityLogs); safeStorage.setItem("wfm_inactivity_logs", JSON.stringify(inactivityLogs)); changed = true; }
         if (changed) refreshLogDependentViews();
       }
     });
