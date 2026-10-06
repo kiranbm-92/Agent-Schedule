@@ -119,7 +119,7 @@
   // this to the console -- and showing it in the topbar (see initializeAppView) -- makes it possible
   // to confirm at a glance whether a given device is actually on the latest deployed build before
   // spending time debugging something that's really just a stale cache/old copy.
-  window.WFM_APP_BUILD = "2026-10-01-v1.2";
+  window.WFM_APP_BUILD = "2026-10-05-v1.2";
   console.log("WFM CRM build:", window.WFM_APP_BUILD);
   // Turns a raw Firestore error into a plain-English hint about WHICH of the common causes it is,
   // so the on-screen sync banner is self-diagnosing instead of just saying "sync failed".
@@ -233,7 +233,7 @@
         // fires, which then immediately re-renders the Dashboard/Attendance/Manage Agents
         // views with the stale data. Only ever move an agent's entry FORWARD (equal or
         // newer startTime), never backward.
-        let __mergedLiveStatus = {};        try { __mergedLiveStatus = JSON.parse(safeStorage.getItem("wfm_live_agent_status") || "{}"); } catch(e) { __mergedLiveStatus = {}; }        Object.keys(data.liveStatus).forEach(function(k){           const incoming = data.liveStatus[k];           const existing = __mergedLiveStatus[k];           if (!existing || !existing.startTime || !incoming || !incoming.startTime || incoming.startTime >= existing.startTime) { __mergedLiveStatus[k] = incoming; }        });        safeStorage.setItem("wfm_live_agent_status", JSON.stringify(__mergedLiveStatus));        syncLiveAuxTopPill(__mergedLiveStatus);
+        let __mergedLiveStatus = {};        try { __mergedLiveStatus = JSON.parse(safeStorage.getItem("wfm_live_agent_status") || "{}"); } catch(e) { __mergedLiveStatus = {}; }        Object.keys(data.liveStatus).forEach(function(k){           const incoming = data.liveStatus[k];           const existing = __mergedLiveStatus[k];           const __recentLocalWrite = (window.__liveLocalWriteAt && window.__liveLocalWriteAt[k] && (Date.now() - window.__liveLocalWriteAt[k]) < 15000); if (!existing || !existing.startTime || !incoming || !incoming.startTime || incoming.startTime >= existing.startTime || !__recentLocalWrite) { __mergedLiveStatus[k] = incoming; }        });        safeStorage.setItem("wfm_live_agent_status", JSON.stringify(__mergedLiveStatus));        syncLiveAuxTopPill(__mergedLiveStatus);
         // Handle a manager/TL/Admin forcing THIS session to log out
         if (typeof currentUser !== 'undefined' && currentUser) {
           const myKey = currentUser.username.toLowerCase();
@@ -320,11 +320,19 @@
       safeStorage.setItem("wfm_inactivity_logs", JSON.stringify(inactivityLogs || {}));
     } catch (e) { console.error("Local persist error:", e); }
 
-    const results = await Promise.allSettled([
-      setDoc(globalDocRef, centralState, { merge: true }),
-      setDoc(schedulesDocRef, schedulesState, { merge: true }),
-      ...weekWrites.map(w => setDoc(logWeekDocRef(w.weekKey), w.payload, { merge: true }))
-    ]);
+    // Only write documents whose content actually changed since this browser last wrote them
+    // successfully. Previously EVERY save rewrote the central, schedules and all 6 weekly log
+    // documents (8 writes) even when only today's log changed, which multiplies Firestore's free
+    // daily write quota usage by ~8x across all agents and can trip "quota exceeded", after which
+    // every agent's AUX/live status stops syncing.
+    window.__lastWrittenDocs = window.__lastWrittenDocs || {};
+    const __jobs = [];
+    const __queue = (id, ref, data) => { const sig = JSON.stringify(data); if (window.__lastWrittenDocs[id] === sig) return; __jobs.push({ id, sig, p: setDoc(ref, data, { merge: true }) }); };
+    __queue("central", globalDocRef, centralState);
+    __queue("schedules", schedulesDocRef, schedulesState);
+    weekWrites.forEach(w => __queue("week_" + w.weekKey, logWeekDocRef(w.weekKey), w.payload));
+    const results = await Promise.allSettled(__jobs.map(j => j.p));
+    results.forEach((r, i) => { if (r.status === 'fulfilled') window.__lastWrittenDocs[__jobs[i].id] = __jobs[i].sig; });
     const failed = results.filter(r => r.status === 'rejected');
     if (failed.length === 0) {
       if (typeof showSyncBanner === 'function') showSyncBanner(false);
@@ -342,6 +350,12 @@
   // triggers any write that touches other agents' live status at all).
   window.pushLiveStatusField = async function(userKey, statusObj) {
     if (!userKey) return;
+    // Remember when THIS browser last wrote this agent's status, so the snapshot merge only
+    // protects a fresh local write for a few seconds and otherwise trusts Firestore (the source
+    // of truth). Previously a snapshot was dropped whenever its startTime was older than the
+    // cached one, which let a clock jump or a manager override pin a stale status (e.g. Break)
+    // on every other browser's Dashboard indefinitely.
+    window.__liveLocalWriteAt = window.__liveLocalWriteAt || {}; window.__liveLocalWriteAt[userKey] = Date.now();
     try {
       // Use FieldPath with the key as its own path SEGMENT, not a dot-joined string. Almost every
       // username/email contains a literal "." (e.g. "wfm@coindcx.com"), and a plain string like
@@ -465,7 +479,7 @@ const LIVE_DROPDOWN_AUX = [ {key:"unavailable", label:"Unavailable", short:"UN",
 const defaultRoles = [ {key:"admin", label:"WFM Admin", accessMode:"write", canEdit:true, canViewAll:true, canDownload:true, canAdmin:true}, {key:"team_leader", label:"Team Leader", accessMode:"read", canEdit:false, canViewAll:true, canDownload:true, canAdmin:false}, {key:"agent", label:"Agent", accessMode:"agent", canEdit:false, canViewAll:false, canDownload:false, canAdmin:false}];
 function __safeParse(raw, fallback){ try { const parsed = JSON.parse(raw); return (parsed === null || parsed === undefined) ? fallback : parsed; } catch(e){ return fallback; }}
 let systemRoles = __safeParse(safeStorage.getItem("wfm_system_roles"), null) || defaultRoles;let ROLE_OPTIONS = systemRoles.map(r => r.label);
-const defaultUsers = [   {id:"wfm@coindcx.com",name:"WFM Admin",username:"wfm@coindcx.com",email:"wfm@coindcx.com",phone:"+919876543210",password:"Admin@007",role:"admin",agency:"Internal",unit:"WFM",department:"WFM",queue:"All",shift:"09:00-18:00",requirePasswordReset:false},   {id:"agent001@company.com",name:"Rahul Sharma",username:"agent001",email:"agent001@company.com",phone:"+919845890465",password:"Agent@123",role:"agent",agency:"RM",unit:"Support",department:"CS Delivery",queue:"Livechat",shift:"08:00-17:00",requirePasswordReset:false},   {id:"agent002@company.com",name:"Priya Nair",username:"agent002",email:"agent002@company.com",phone:"+919812345678",password:"Agent@123",role:"agent",agency:"RM",unit:"Support",department:"Quality",queue:"Email",shift:"11:00-20:00",requirePasswordReset:false},   {id:"agent003@company.com",name:"Amit Kumar",username:"agent003",email:"agent003@company.com",phone:"+919823456789",password:"Agent@123",role:"agent",agency:"CNX",unit:"Support",department:"Growth",queue:"Campaign Specialist",shift:"15:00-00:00",requirePasswordReset:false},   {id:"agent004@company.com",name:"Sneha Das",username:"agent004",email:"agent004@company.com",phone:"+919834567890",password:"Agent@123",role:"agent",agency:"FiveS",unit:"Support",department:"Training",queue:"Calling Sales",shift:"23:00-08:00",requirePasswordReset:false},   {id:"tl001@company.com",name:"Team Lead CS",username:"tl001",email:"tl001@company.com",phone:"+919890123456",password:"Agent@123",role:"team_leader",agency:"Internal",unit:"Support",department:"Growth",queue:"Campaign Specialist",shift:"09:00-18:00",requirePasswordReset:false}];
+const defaultUsers = [ {id:"wfm@coindcx.com",name:"WFM Admin",username:"wfm@coindcx.com",email:"wfm@coindcx.com",phone:"+919876543210",password:"Admin@007",role:"admin",agency:"Internal",unit:"WFM",department:"WFM",queue:"All",shift:"09:00-18:00",requirePasswordReset:false} ];
 const defaultCallingLeads = [  { id: "lead_101", customerName: "Vikram Malhotra", phone: "+919876512345", queue: "Calling Sales", owner: "agent001", status: "Pending" },  { id: "lead_102", customerName: "Ananya Roy", phone: "+919812398765", queue: "Onboarding Ops", owner: "agent001", status: "In Progress" },  { id: "lead_103", customerName: "Suresh Menon", phone: "+919823412345", queue: "Calling Sales", owner: "agent002", status: "Follow Up" },  { id: "lead_104", customerName: "Meera Joshi", phone: "+919834598765", queue: "Calling Sales", owner: "agent003", status: "Pending" }];
 let users = __safeParse(safeStorage.getItem("wfm_users"), null) || defaultUsers;let continuousSchedules = __safeParse(safeStorage.getItem("wfm_continuous_schedules"), {});let grid15mSchedules = __safeParse(safeStorage.getItem("wfm_grid15m_schedules"), {});let auxLogs = __safeParse(safeStorage.getItem("wfm_aux_logs"), {});let inactivityLogs = __safeParse(safeStorage.getItem("wfm_inactivity_logs"), {});let locationLogs = __safeParse(safeStorage.getItem("wfm_location_logs"), {});let callingLeads = __safeParse(safeStorage.getItem("wfm_calling_leads"), null) || defaultCallingLeads;
 let currentUser = null;let selectedAux = "available";let selectedDate = today();let timerInterval = null;let activePlotMode = "timeline";let isMouseDown = false;let copiedScheduleBuffer = null;let currentActiveAux = "unavailable";let auxStartTime = Date.now();let targetPlotAgentId = null;window.__lastHandledForceLogout = 0;
@@ -619,10 +633,8 @@ function closeAlreadyLoggedInModal(){
    if(modal) modal.classList.add("hidden");
 }
 function login(){   syncStorageData();   const uInput = (document.getElementById("loginUser")?.value || "").trim();   const pInput = (document.getElementById("loginPass")?.value || "").trim();   const u = uInput.toLowerCase();   if(!uInput || !pInput){ document.getElementById("loginError").textContent = "Please enter both email/username and password."; return; }   document.getElementById("loginError").textContent = "";
-  defaultUsers.forEach(du => {      if(!users.some(x => x.username.toLowerCase() === du.username.toLowerCase())){ users.push(du); }   });
   let found = users.find(x =>       (x.username && x.username.trim().toLowerCase() === u) ||      (x.email && x.email.trim().toLowerCase() === u) ||      (x.username && x.username.trim().toLowerCase().split("@")[0] === u.split("@")[0]) ||      (x.email && x.email.trim().toLowerCase().split("@")[0] === u.split("@")[0]) ||      (x.username && x.username.trim().toLowerCase().replace("external-","").split("@")[0] === u.replace("external-","").split("@")[0])   );
   if(!found && (u === "wfm@coindcx.com" || u === "wfm.admin" || u === "admin")){      found = { id: "wfm@coindcx.com", name: "WFM Admin", username: "wfm@coindcx.com", email: "wfm@coindcx.com", phone: "+919876543210", password: "Admin@007", role: "admin", agency: "Internal", unit: "WFM", department: "WFM", queue: "All", shift: "09:00-18:00", requirePasswordReset: false };      users.push(found);      safeSaveAll();   }
-  if(!found){      const userHasSchedules = Object.keys(continuousSchedules).concat(Object.keys(grid15mSchedules)).some(k => k.toLowerCase().includes(u));      if(userHasSchedules || u.includes("@") || u.startsWith("agent") || u.startsWith("tl")){         const cleanName = u.split("@")[0].replace("external-","").replace("."," ").replace(/\b\w/g, l => l.toUpperCase());         found = {            id: uInput.toLowerCase(),            name: cleanName,            username: uInput,            email: u.includes("@") ? uInput : uInput + "@company.com",            phone: "",        role: u.startsWith("tl") ? "team_leader" : "agent",            agency: "External",            unit: "Support",            department: "CS Delivery",            queue: "Livechat",            shift: "09:00-18:00",            requirePasswordReset: false         };         found.password = pInput;      users.push(found);         safeSaveAll();      }   }
   if(!found){       document.getElementById("loginError").textContent = "Account not found. Please check your email or username.";       return;    }
   if(found.password !== pInput){      document.getElementById("loginError").textContent = "Invalid password. Please try again or use 'Reset Password?'.";       return;    }
   if(found.status === "inactive"){      document.getElementById("loginError").textContent = "You do not have access to this tool. Please contact WFM Admin.";       return;    }
@@ -842,8 +854,10 @@ function matchAuxCode(rawVal) {   if(!rawVal) return null;   const query = rawVa
     let startDate = String(cols[idxStartDate] || '').trim();      let endDate = String(cols[idxEndDate] || '').trim();      let username = String(cols[idxUsername] || '').trim();      let queueVal = idxQueue >= 0 ? String(cols[idxQueue] || '').trim() : '';    let auxLabel = String(cols[idxAux] || '').trim();      let startTime = String(cols[idxStartTime] || '').trim();      let endTime = String(cols[idxEndTime] || '').trim();    let phoneVal = idxPhone >= 0 ? String(cols[idxPhone] || '').trim() : '';
     if(!username || username.toLowerCase().includes('username')) continue;      if(!startDate) continue;
     const normStartDate = normalizeDateStr(startDate);      const normEndDate = endDate ? normalizeDateStr(endDate) : normStartDate;    const uClean = username.toLowerCase();
-    let agent = users.find(u =>          u.username.trim().toLowerCase() === uClean ||          (u.email && u.email.trim().toLowerCase() === uClean)    );    
-    if(!agent){         const cleanName = username.split("@")[0].replace("external-","").replace("."," ").replace(/\b\w/g, l => l.toUpperCase());         agent = {            id: uClean,            name: cleanName,            username: username,            email: username.includes("@") ? username : username + "@coindcx.com",            phone: phoneVal || "",        password: "Agent@123",            role: "agent",            agency: "External",            unit: "Support",            department: "CS Delivery",            queue: queueVal || "Livechat",            shift: (startTime && endTime) ? `${startTime}-${endTime}` : "09:00-18:00",            requirePasswordReset: false         };         users.push(agent);      } else {      if(queueVal) agent.queue = queueVal;      if(phoneVal && (!agent.phone || !phoneDigitsOnly(agent.phone))) agent.phone = phoneVal;    }
+    const __norm = v => String(v||"").trim().toLowerCase().replace(/^external-/,"");
+    let agent = users.find(u =>          u.username.trim().toLowerCase() === uClean ||          (u.email && u.email.trim().toLowerCase() === uClean)    ) || users.find(u => __norm(u.username) === __norm(uClean) || (u.email && __norm(u.email) === __norm(uClean)));
+    if(!agent){ (window.__uploadUnmatched = window.__uploadUnmatched || new Set()).add(username); continue; }
+    if(false){         const cleanName = username.split("@")[0].replace("external-","").replace("."," ").replace(/\b\w/g, l => l.toUpperCase());         agent = {            id: uClean,            name: cleanName,            username: username,            email: username.includes("@") ? username : username + "@coindcx.com",            phone: phoneVal || "",        password: "Agent@123",            role: "agent",            agency: "External",            unit: "Support",            department: "CS Delivery",            queue: queueVal || "Livechat",            shift: (startTime && endTime) ? `${startTime}-${endTime}` : "09:00-18:00",            requirePasswordReset: false         };         users.push(agent);      } else {      if(queueVal) agent.queue = queueVal;      if(phoneVal && (!agent.phone || !phoneDigitsOnly(agent.phone))) agent.phone = phoneVal;    }
     const aux = matchAuxCode(auxLabel);
     let parseT = function(tStr, isEndTime = false) {         if(!tStr && tStr !== 0) return isEndTime ? 1440 : 0;         let raw = String(tStr).trim().toUpperCase();         if(raw === "0" || raw === "0:00" || raw === "00:00" || raw === "24:00") {        return isEndTime ? 1440 : 0;      }         if(!isNaN(raw) && parseFloat(raw) < 1) {            let mins = Math.round(parseFloat(raw) * 1440);        return (isEndTime && mins === 0) ? 1440 : mins;      }         let match = raw.match(/(\d{1,2}):(\d{2})/);         if (match) {            let h = parseInt(match[1], 10);            let m = parseInt(match[2], 10);            if (raw.includes("PM") && h < 12) h += 12;            if (raw.includes("AM") && h === 12) h = 0;            let mins = h * 60 + m;        return (isEndTime && mins === 0) ? 1440 : mins;      }         let hOnly = raw.replace(/[^\d]/g, "");         if (hOnly.length >= 1 && hOnly.length <= 4) {            let num = parseInt(hOnly, 10);            if (num <= 24) {          let mins = num * 60;          return (isEndTime && mins === 0) ? 1440 : mins;        }      }         return isEndTime ? 1440 : 0;      };
     const startMin = parseT(startTime, false);      let endMin = parseT(endTime, true);  
@@ -861,7 +875,7 @@ function matchAuxCode(rawVal) {   if(!rawVal) return null;   const query = rawVa
       count++;    }   }
   // Automatically adjust view filters to span imported CSV date bounds
   if(minImportDate && maxImportDate){    const fromEl = document.getElementById("scheduleFromDate");    const toEl = document.getElementById("scheduleToDate");    if(fromEl) fromEl.value = minImportDate;    if(toEl) toEl.value = maxImportDate;  }
-  safeSaveAll();   populateFilters();   renderAdmin();   renderPlot();   alert(`Successfully imported ${count} schedule entries from ${fileName}! Overlaps trimmed and dates displayed from ${minImportDate} to ${maxImportDate}.`);}
+  safeSaveAll();   populateFilters();   renderAdmin();   renderPlot();   const __un = window.__uploadUnmatched ? Array.from(window.__uploadUnmatched) : []; window.__uploadUnmatched = null; alert(`Successfully imported ${count} schedule entries from ${fileName}! Overlaps trimmed and dates displayed from ${minImportDate} to ${maxImportDate}.` + (__un.length ? `\n\nSkipped (no matching user in Admin, no account was created): ${__un.join(", ")}` : ""));}
 async function renderAgentHistory(){   if(!currentUser)return;   const histDate=document.getElementById("historyDate").value||today();   document.getElementById("historyDateLabel").textContent=histDate;   document.getElementById("historyLogLabel").textContent=histDate;
   await ensureLogsForRange(histDate, histDate);
   const logs=getAuxLogEntries(histDate+"_"+currentUser.username.toLowerCase(), histDate+"_"+currentUser.id);   const totals={};   LIVE_DROPDOWN_AUX.forEach(a=>totals[a.key]=0);   logs.forEach(l=>{ if(totals[l.auxKey]!==undefined) totals[l.auxKey]+=l.durationSec; });
